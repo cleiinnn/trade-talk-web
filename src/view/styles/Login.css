@@ -1,0 +1,93 @@
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-height: 100vh;
+  background-color: white;
+  font-family: Arial, sans-serif;
+}
+
+/* Login box */
+.login-box {
+  width: 400px;
+  padding: 40px;
+  border: 2px solid black;
+  border-radius: 8px;
+  text-align: center;
+  box-sizing: border-box;
+  background-color: white;
+}
+
+/* Logo */
+.login-logo {
+  font-size: 24px;
+  margin-bottom: 20px;
+  font-weight: bold;
+}
+
+/* Form elements */
+.login-box form {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.login-box label {
+  margin-top: 10px;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.login-box input {
+  padding: 10px;
+  border: 1px solid black;
+  border-radius: 5px;
+  width: 100%;
+}
+
+/* Button */
+.login-box button {
+  margin-top: 20px;
+  padding: 10px;
+  background-color: black;
+  color: white;
+  border: 1px solid black;
+  border-radius: 10px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.login-box button:hover {
+  background-color: white;
+  color: black;
+}
+
+/* Message text */
+.message {
+  margin-top: 10px;
+  color: red;
+}
+
+/* Links below form */
+.links{
+  margin-top: 15px;
+  display: flex;
+  flex-direction: column;
+  font-size: 14px;
+  color: black;
+  gap: 5px;
+}
+
+.links a {
+  color: rgb(41, 156, 238);
+  font-size: 14px;
+}
+
+.links a:hover {
+  color: gray;
+}
+
+.links p {
+  margin: 0;
+}
