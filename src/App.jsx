@@ -7,6 +7,7 @@ import Register from "./view/Register";
 import Index from "./view/index";
 import ForgotPassword from "./view/ForgotPassword";
 import Favorites from "./view/user/Favorites";
+import GuestGate from "./view/Guestgate";
 
 // User Page
 import Home from "./view/user/Home";
@@ -39,6 +40,10 @@ const router = createBrowserRouter([
   { path: "/register", element: <Register /> },
   { path: "/forgot-password", element: <ForgotPassword /> },
   { path: "/", element: <Index /> },
+
+  { path: "/marketplace", element: <GuestGate page="Marketplace" /> },
+  { path: "/community", element: <GuestGate page="Community" /> },
+  { path: "/safety", element: <GuestGate page="Safety" /> },
 
   // User Page
   { path: "/home", element: <Home /> },

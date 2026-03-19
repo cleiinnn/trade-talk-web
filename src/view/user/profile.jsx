@@ -286,6 +286,23 @@ const Profile = () => {
                       </span>
                     </div>
                   )}
+
+                  {!isOwnProfile && (
+                    <div className="mt-4 flex justify-center">
+                      <button
+                        onClick={() => navigate("/messages", {
+                          state: {
+                            other_user_id: targetUserId,
+                            other_username: profile?.username || "User",
+                            other_avatar: profile?.profile_picture_url,
+                          }
+                        })}
+                        className="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-xs font-black uppercase tracking-widest hover:bg-[#4B99D4] transition-colors"
+                      >
+                        Message
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Email */}

@@ -12,7 +12,7 @@ export const theme = {
   
   // Reusable UI components
   button: {
-    primary: "flex items-center gap-2 rounded-full bg-[#4B99D4] px-5 py-2 text-xs font-bold text-white transition-all hover:bg-[#3a88c3] active:scale-95 shadow-sm",
+    primary: "flex items-center gap-2 rounded-full bg-[#1e293b] px-5 py-2 text-xs font-bold text-white active:scale-95 shadow-sm",
     darkIcon: "rounded-xl bg-slate-900 p-3 text-white transition-all hover:bg-[#4B99D4] hover:shadow-lg hover:shadow-[#4B99D4]/20 active:scale-90",
     fav: (isLiked) => `absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-xl shadow-sm backdrop-blur transition-all active:scale-75 ${
       isLiked ? "bg-white text-red-500" : "bg-white/90 text-slate-500 hover:text-red-500"

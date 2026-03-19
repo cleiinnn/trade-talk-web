@@ -1,9 +1,9 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import axios from "axios";
 import {
-  ArrowLeft, Send, MessageCircle, Package,
-  User, Loader2, ShoppingBag, Flag
+  ArrowLeft, Send, MessageCircle,
+  Loader2, ShoppingBag, Flag
 } from "lucide-react";
 import ReportUserModal from "./ReportUserModal";
 
@@ -20,15 +20,20 @@ const ConvoItem = ({ convo, isActive, onClick }) => (
         : "bg-white hover:bg-slate-50 border border-slate-100"
     }`}
   >
-    <img
-      src={convo.listing_image}
-      alt={convo.listing_title}
-      className="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-slate-100"
-    />
+    {convo.other_avatar ? (
+      <img
+        src={convo.other_avatar}
+        alt={convo.other_username}
+        className="w-10 h-10 rounded-xl object-cover flex-shrink-0 border border-slate-100"
+      />
+    ) : (
+      <div className={`w-10 h-10 rounded-xl flex-shrink-0 border border-slate-100 flex items-center justify-center text-xs font-black ${
+        isActive ? "bg-white/20 text-white" : "bg-slate-100 text-slate-600"
+      }`}>
+        {(convo.other_username || "U").slice(0, 1).toUpperCase()}
+      </div>
+    )}
     <div className="flex-1 min-w-0">
-      <p className={`text-xs font-black truncate ${isActive ? "text-white" : "text-slate-800"}`}>
-        {convo.listing_title}
-      </p>
       <p className={`text-[10px] font-bold truncate mt-0.5 ${isActive ? "text-slate-300" : "text-slate-400"}`}>
         {convo.other_username}
       </p>
@@ -65,6 +70,10 @@ const Messages = () => {
   const navigate  = useNavigate();
   const location  = useLocation();
   const bottomRef = useRef(null);
+  const listRef = useRef(null);
+  const autoScrollRef = useRef(true);
+  const prevScrollTopRef = useRef(0);
+  const pendingRestoreRef = useRef(null);
 
   const user = JSON.parse(sessionStorage.getItem("user") || "null");
 
@@ -73,7 +82,7 @@ const Messages = () => {
   const [loadingConvos, setLoadingConvos] = useState(true);
 
   // Active chat
-  const [activeConvo, setActiveConvo] = useState(null); // { listing_id, listing_title, listing_image, other_user_id, other_username }
+  const [activeConvo, setActiveConvo] = useState(null); // { other_user_id, other_username, other_avatar }
   const [messages, setMessages]       = useState([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [newMessage, setNewMessage]   = useState("");
@@ -85,33 +94,78 @@ const Messages = () => {
 
   // Polling ref
   const pollRef = useRef(null);
+  const convoSigRef = useRef("");
+  const msgSigRef = useRef("");
+  const msgOwnerRef = useRef(null);
 
   useEffect(() => {
     if (!user || user.role !== "user") navigate("/login");
   }, []);
 
-  // If navigated here from Purchase with state, open that chat directly
+  const normalizeAvatar = useCallback((url) => {
+    if (!url) return null;
+    return url.startsWith("http") ? url : `${BASE}/${url}`;
+  }, []);
+
+  const fetchUserSummary = useCallback(async (userId) => {
+    if (!userId) return null;
+    try {
+      const res = await axios.get(`${BASE}/get_user_profile.php?user_id=${userId}`);
+      if (!res.data?.success) return null;
+      return {
+        other_user_id: userId,
+        other_username: res.data.username || res.data.email || "User",
+        other_avatar: normalizeAvatar(res.data.profile_picture_url),
+      };
+    } catch {
+      return null;
+    }
+  }, [normalizeAvatar]);
+
+  // If navigated here with state, open that chat directly
   useEffect(() => {
-    if (location.state?.listing_id) {
-      setActiveConvo({
-        listing_id:     location.state.listing_id,
-        listing_title:  location.state.listing_title,
-        listing_image:  location.state.listing_image,
-        other_user_id:  location.state.other_user_id,
-        other_username: location.state.other_username,
+    if (location.state?.other_user_id) {
+      const hasName = !!location.state.other_username;
+      if (hasName) {
+        setActiveConvo({
+          other_user_id:  location.state.other_user_id,
+          other_username: location.state.other_username,
+          other_avatar: normalizeAvatar(location.state.other_avatar),
+        });
+      } else {
+        fetchUserSummary(location.state.other_user_id).then((summary) => {
+          if (summary) setActiveConvo(summary);
+        });
+      }
+      return;
+    }
+    const qp = new URLSearchParams(location.search);
+    const userId = Number(qp.get("user_id") || 0);
+    if (userId) {
+      fetchUserSummary(userId).then((summary) => {
+        if (summary) setActiveConvo(summary);
       });
     }
-  }, [location.state]);
+  }, [location.state, location.search, fetchUserSummary, normalizeAvatar]);
 
   // Fetch conversations list
   const fetchConversations = useCallback(async () => {
     if (!user) return;
     try {
-      const res = await axios.get(`${BASE}/get_conversations.php?user_id=${user.user_id}`);
-      setConversations(Array.isArray(res.data) ? res.data : []);
+      const res = await axios.get(`${BASE}/get_dm_conversations.php?user_id=${user.user_id}`);
+      const rows = Array.isArray(res.data) ? res.data : [];
+      const normalized = rows.map((c) => ({
+        ...c,
+        other_avatar: normalizeAvatar(c.other_avatar),
+      }));
+      const sig = normalized.map(r => `${r.other_user_id}:${r.last_at}:${r.unread_count}`).join("|");
+      if (sig !== convoSigRef.current) {
+        convoSigRef.current = sig;
+        setConversations(normalized);
+      }
     } catch { setConversations([]); }
     finally { setLoadingConvos(false); }
-  }, [user]);
+  }, [user, normalizeAvatar]);
 
   useEffect(() => { fetchConversations(); }, [fetchConversations]);
 
@@ -119,27 +173,39 @@ const Messages = () => {
   const fetchMessages = useCallback(async () => {
     if (!activeConvo || !user) return;
     try {
-      const res = await axios.get(`${BASE}/get_messages.php`, {
+      const res = await axios.get(`${BASE}/get_dm_messages.php`, {
         params: {
-          listing_id: activeConvo.listing_id,
           user_a:     user.user_id,
           user_b:     activeConvo.other_user_id,
         }
       });
-      setMessages(Array.isArray(res.data) ? res.data : []);
+      const next = Array.isArray(res.data) ? res.data : [];
+      const last = next[next.length - 1];
+      const sig = last ? `${last.message_id}|${last.created_at}|${next.length}` : `empty|${activeConvo.other_user_id}`;
+      if (sig !== msgSigRef.current) {
+        msgSigRef.current = sig;
+        if (!autoScrollRef.current && listRef.current) {
+          pendingRestoreRef.current = {
+            prevHeight: listRef.current.scrollHeight,
+            prevTop: listRef.current.scrollTop,
+          };
+        }
+        msgOwnerRef.current = activeConvo.other_user_id;
+        setMessages(next);
+      }
     } catch { setMessages([]); }
   }, [activeConvo, user]);
 
   // Open a conversation
   const openConvo = (convo) => {
+    msgSigRef.current = "";
+    autoScrollRef.current = true;
+    msgOwnerRef.current = null;
     setActiveConvo({
-      listing_id:     convo.listing_id,
-      listing_title:  convo.listing_title,
-      listing_image:  convo.listing_image,
       other_user_id:  convo.other_user_id,
       other_username: convo.other_username,
+      other_avatar:   convo.other_avatar,
     });
-    setMessages([]);
   };
 
   // Load messages when active convo changes
@@ -151,25 +217,54 @@ const Messages = () => {
     // Poll every 3 seconds
     clearInterval(pollRef.current);
     pollRef.current = setInterval(() => {
-      fetchMessages();
+      if (autoScrollRef.current) {
+        fetchMessages();
+      }
       fetchConversations();
     }, 3000);
 
     return () => clearInterval(pollRef.current);
-  }, [activeConvo]);
+  }, [activeConvo, fetchMessages, fetchConversations]);
 
-  // Auto-scroll to bottom when messages change
+  const updateAutoScroll = () => {
+    const el = listRef.current;
+    if (!el) return;
+    const threshold = 20;
+    const prevTop = prevScrollTopRef.current;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (el.scrollTop < prevTop) {
+      autoScrollRef.current = false;
+    } else if (distanceFromBottom <= threshold) {
+      autoScrollRef.current = true;
+    }
+    prevScrollTopRef.current = el.scrollTop;
+  };
+
+  // Preserve scroll position when new messages arrive and user is reading older ones
+  useLayoutEffect(() => {
+    if (!pendingRestoreRef.current || autoScrollRef.current) return;
+    const el = listRef.current;
+    if (!el) return;
+    const { prevHeight, prevTop } = pendingRestoreRef.current;
+    const delta = el.scrollHeight - prevHeight;
+    el.scrollTop = prevTop + (delta > 0 ? delta : 0);
+    pendingRestoreRef.current = null;
+  }, [messages]);
+
+  // Auto-scroll to bottom when messages change (only if user is near bottom)
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (autoScrollRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: "auto" });
+    }
   }, [messages]);
 
   // Send a message
   const handleSend = async () => {
     if (!newMessage.trim() || !activeConvo || sending) return;
+    autoScrollRef.current = true;
     setSending(true);
     try {
-      await axios.post(`${BASE}/send_message.php`, {
-        listing_id:   activeConvo.listing_id,
+      await axios.post(`${BASE}/send_dm_message.php`, {
         sender_id:    user.user_id,
         receiver_id:  activeConvo.other_user_id,
         message_text: newMessage.trim(),
@@ -216,15 +311,14 @@ const Messages = () => {
             <div className="text-center py-10 space-y-2">
               <MessageCircle size={32} className="mx-auto text-slate-200" />
               <p className="text-slate-300 font-black text-xs uppercase tracking-widest">No conversations yet</p>
-              <p className="text-slate-300 text-[10px]">Accept a request to start chatting</p>
+              <p className="text-slate-300 text-[10px]">Start a chat from a user profile</p>
             </div>
           ) : (
-            conversations.map((c, i) => (
+            conversations.map((c) => (
               <ConvoItem
-                key={`${c.listing_id}-${c.other_user_id}-${i}`}
+                key={c.other_user_id}
                 convo={c}
                 isActive={
-                  activeConvo?.listing_id === c.listing_id &&
                   activeConvo?.other_user_id === c.other_user_id
                 }
                 onClick={() => openConvo(c)}
@@ -246,16 +340,20 @@ const Messages = () => {
             <>
               {/* Chat header */}
               <div className="px-6 py-4 border-b border-slate-50 flex items-center gap-4 flex-shrink-0">
-                <img
-                  src={activeConvo.listing_image}
-                  alt={activeConvo.listing_title}
-                  className="w-10 h-10 rounded-xl object-cover border border-slate-100"
-                />
+                {activeConvo.other_avatar ? (
+                  <img
+                    src={activeConvo.other_avatar}
+                    alt={activeConvo.other_username}
+                    className="w-10 h-10 rounded-xl object-cover border border-slate-100"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center bg-slate-100 text-slate-600 text-xs font-black border border-slate-100">
+                    {(activeConvo.other_username || "U").slice(0, 1).toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
-                  <p className="text-xs font-black text-slate-800 truncate">{activeConvo.listing_title}</p>
-                  <p className="text-[10px] font-bold text-[#4B99D4] uppercase tracking-widest">
-                    {activeConvo.other_username}
-                  </p>
+                  <p className="text-xs font-black text-slate-800 truncate">{activeConvo.other_username}</p>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Direct Message</p>
                 </div>
 
                  {/* <-- ADDED: Report button */}
@@ -280,25 +378,35 @@ const Messages = () => {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-3">
-                {loadingMsgs ? (
-                  <div className="text-center py-10">
-                    <Loader2 size={24} className="mx-auto text-slate-200 animate-spin" />
-                  </div>
-                ) : messages.length === 0 ? (
+              <div
+                ref={listRef}
+                onScroll={updateAutoScroll}
+                className="flex-1 overflow-y-auto px-6 py-5 space-y-3 relative"
+                aria-busy={loadingMsgs}
+              >
+                {messages.map(msg => (
+                  <ChatBubble
+                    key={msg.message_id}
+                    msg={msg}
+                    isMe={Number(msg.sender_id) === Number(user.user_id)}
+                  />
+                ))}
+
+                {(msgOwnerRef.current !== activeConvo.other_user_id || messages.length === 0) && !loadingMsgs && (
                   <div className="text-center py-10 space-y-2">
                     <ShoppingBag size={32} className="mx-auto text-slate-100" />
                     <p className="text-slate-300 font-bold text-xs">No messages yet. Say hello!</p>
                   </div>
-                ) : (
-                  messages.map(msg => (
-                    <ChatBubble
-                      key={msg.message_id}
-                      msg={msg}
-                      isMe={Number(msg.sender_id) === Number(user.user_id)}
-                    />
-                  ))
                 )}
+
+                {loadingMsgs && (
+                  <div className="absolute inset-0 flex items-start justify-center pt-6 pointer-events-none">
+                    <div className="bg-white/80 backdrop-blur-sm px-3 py-2 rounded-xl border border-slate-100 shadow-sm">
+                      <Loader2 size={18} className="text-slate-300 animate-spin" />
+                    </div>
+                  </div>
+                )}
+
                 <div ref={bottomRef} />
               </div>
 

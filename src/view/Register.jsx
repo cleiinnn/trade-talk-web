@@ -1,298 +1,419 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { registerUser } from "../viewmodel/api";
-import { Link } from "react-router-dom";
-import { Repeat, User, Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2,  Sparkles } from "lucide-react";
+import { useNavigate, Link } from "react-router-dom";
+import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
+import {
+  Repeat, User, Mail, Lock, Eye, EyeOff,
+  ArrowRight, AlertCircle, CheckCircle2,
+} from "lucide-react";
 
+// ─── MAGNETIC BUTTON ──────────────────────────────────────────────────────────
+const MagneticButton = ({ children, className, type = "button", onClick, disabled, style = {} }) => {
+  const ref = useRef(null);
+  const x = useMotionValue(0);
+  const y = useMotionValue(0);
+  const sx = useSpring(x, { stiffness: 400, damping: 28 });
+  const sy = useSpring(y, { stiffness: 400, damping: 28 });
+  const onMove = (e) => {
+    const r = ref.current.getBoundingClientRect();
+    x.set((e.clientX - (r.left + r.width / 2)) * 0.22);
+    y.set((e.clientY - (r.top + r.height / 2)) * 0.22);
+  };
+  const onLeave = () => { x.set(0); y.set(0); };
+  return (
+    <motion.button
+      ref={ref} type={type} onClick={onClick} disabled={disabled}
+      style={{ x: sx, y: sy, ...style }}
+      onMouseMove={onMove} onMouseLeave={onLeave}
+      whileHover={disabled ? {} : { scale: 1.02 }}
+      whileTap={disabled ? {} : { scale: 0.97 }}
+      className={className}
+    >
+      {children}
+    </motion.button>
+  );
+};
 
+// ─── ANIMATION VARIANTS ───────────────────────────────────────────────────────
+const stagger = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.06, delayChildren: 0.12 } },
+};
+const fadeUp = {
+  hidden: { opacity: 0, y: 12 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.22, 1, 0.36, 1] } },
+};
 
+// ─── SMART INPUT ──────────────────────────────────────────────────────────────
+const SmartInput = ({ icon: Icon, label, type, value, onChange, placeholder, required, children, half }) => {
+  const [focused, setFocused] = useState(false);
+  return (
+    <motion.div variants={fadeUp} style={{ flex: half ? "0 0 calc(50% - 8px)" : "1 1 100%" }}>
+      <label style={{
+        display: "block", fontSize: 10, fontWeight: 900,
+        letterSpacing: "0.2em", textTransform: "uppercase",
+        color: focused ? "#4B99D4" : "#475569",
+        transition: "color 0.2s", marginBottom: 8, marginLeft: 2,
+      }}>
+        {label}
+      </label>
+      <div style={{ position: "relative" }}>
+        {Icon && (
+          <Icon size={16} style={{
+            position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
+            color: focused ? "#4B99D4" : "#94a3b8", transition: "color 0.2s", pointerEvents: "none",
+          }} />
+        )}
+        <input
+          type={type} value={value} onChange={onChange}
+          placeholder={placeholder} required={required}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          style={{
+            width: "100%", boxSizing: "border-box",
+            padding: `13px 16px 13px ${Icon ? "42px" : "16px"}`,
+            paddingRight: children ? "46px" : "16px",
+            borderRadius: 12, fontSize: 13, fontWeight: 600,
+            color: "#0f172a", background: focused ? "#ffffff" : "#f1f5f9",
+            border: `1.5px solid ${focused ? "#4B99D4" : "#e2e8f0"}`,
+            boxShadow: focused ? "0 0 0 4px rgba(75,153,212,0.1)" : "none",
+            outline: "none", transition: "all 0.2s ease",
+          }}
+        />
+        {children}
+      </div>
+    </motion.div>
+  );
+};
+
+// ─── VALIDATION HELPERS ───────────────────────────────────────────────────────
+const validatePassword = (p) => {
+  if (p.length < 8)           return "Password must be at least 8 characters.";
+  if (!/[A-Z]/.test(p))       return "Must include at least one uppercase letter.";
+  if (!/[a-z]/.test(p))       return "Must include at least one lowercase letter.";
+  if (!/[0-9]/.test(p))       return "Must include at least one number.";
+  if (!/[!@#$%^&*]/.test(p))  return "Must include a special character (!@#$%^&*).";
+  return null;
+};
+
+const validateEmail = (e) => {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) return "Invalid email format.";
+  const domain = e.split("@")[1]?.toLowerCase();
+  const allowed = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"];
+  if (!allowed.includes(domain)) return "Only Gmail, Yahoo, Outlook, Hotmail, or iCloud allowed.";
+  return null;
+};
+
+const validateName = (n, field) => {
+  if (n.length < 2) return `${field} must be at least 2 characters.`;
+  if (!/^[A-Za-z]+$/.test(n)) return `${field} must contain letters only.`;
+  return null;
+};
+
+const validateUsername = (u) => {
+  if (u.length < 3)  return "Username must be at least 3 characters.";
+  if (u.length > 20) return "Username must be at most 20 characters.";
+  if (!/^[A-Za-z0-9_]+$/.test(u)) return "Letters, numbers, and underscores only.";
+  return null;
+};
+
+// ─── REGISTER COMPONENT ───────────────────────────────────────────────────────
 const Register = () => {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
-  const [username, setUsername] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
+  const [firstName, setFirstName]   = useState("");
+  const [lastName, setLastName]     = useState("");
+  const [username, setUsername]     = useState("");
+  const [email, setEmail]           = useState("");
+  const [password, setPassword]     = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [message, setMessage] = useState("");
-  const [isSuccess, setIsSuccess] = useState(false);
-//Password Validation
+  const [message, setMessage]       = useState("");
+  const [isSuccess, setIsSuccess]   = useState(false);
+  const [isLoading, setIsLoading]   = useState(false);
 
-const validatePassword = (password) => {
-  const minLength = 8;
-  const hasUppercase = /[A-Z]/.test(password);
-  const hasLowercase = /[a-z]/.test(password);
-  const hasNumber = /[0-9]/.test(password);
-  const hasSpecial = /[!@#$%^&*]/.test(password);
+  const handleRegister = async (e) => {
+    e.preventDefault();
+    setMessage("");
 
-  if (password.length < minLength) {
-    return "Password must be at least 8 characters long";
-  }
-  if (!hasUppercase) {
-    return "Password must contain at least one uppercase letter";
-  }
-  if (!hasLowercase) {
-    return "Password must contain at least one lowercase letter";
-  }
-  if (!hasNumber) {
-    return "Password must contain at least one number";
-  }
-  if (!hasSpecial) {
-    return "Password must contain at least one special character";
-  }
+    const firstNameError = validateName(firstName, "First name");
+    if (firstNameError) { setIsSuccess(false); setMessage(firstNameError); return; }
 
-  return null; 
-};
+    const lastNameError = validateName(lastName, "Last name");
+    if (lastNameError)  { setIsSuccess(false); setMessage(lastNameError);  return; }
 
-//Email Validation
+    const usernameError = validateUsername(username);
+    if (usernameError)  { setIsSuccess(false); setMessage(usernameError);  return; }
 
-const validateEmail = (email) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const emailError = validateEmail(email);
+    if (emailError)     { setIsSuccess(false); setMessage(emailError);     return; }
 
-  if (!emailRegex.test(email)) {
-    return "Invalid email format";
-  }
+    const passwordError = validatePassword(password);
+    if (passwordError)  { setIsSuccess(false); setMessage(passwordError);  return; }
 
-  const allowedDomains = [
-    "gmail.com",
-    "yahoo.com",
-    "outlook.com",
-    "hotmail.com",
-    "icloud.com"
-  ];
+    setIsLoading(true);
+    try {
+      const data = await registerUser({
+        first_name: firstName, last_name: lastName,
+        username, email, password, role: "user",
+      });
 
-  const domain = email.split("@")[1].toLowerCase();
-
-  if (!allowedDomains.includes(domain)) {
-    return "Only Gmail, Yahoo, Outlook, or Hotmail emails are allowed.";
-  }
-
-  return null;
-};
-
-// First & Last Name Validation
-const validateName = (name, fieldName) => {
-  const nameRegex = /^[A-Za-z]+$/; // letters only
-
-  if (name.length < 2) {
-    return `${fieldName} must be at least 2 characters long`;
-  }
-
-  if (!nameRegex.test(name)) {
-    return `${fieldName} must contain letters only (no numbers or special characters)`;
-  }
-
-  return null;
-};
-
-  // Username Validation
-const validateUsername = (username) => {
-  const usernameRegex = /^[A-Za-z0-9_]+$/; // letters, numbers, underscore
-
-  if (username.length < 3) {
-    return "Username must be at least 3 characters long";
-  }
-
-   if (username.length > 20) {
-    return "Username must be at most 20 characters long";
-  }
-
-  if (!usernameRegex.test(username)) {
-    return "Username can only contain letters, numbers, and underscores";
-  }
-
-  return null;
-};
-
-
- const handleRegister = async (e) => {
-  e.preventDefault();
-  setIsSuccess(false);
-
-  // First Name Validation
-  const firstNameError = validateName(firstName, "First name");
-  if (firstNameError) {
-    setMessage(firstNameError);
-    return;
-  }
-
-  // Last Name Validation
-  const lastNameError = validateName(lastName, "Last name");
-  if (lastNameError) {
-    setMessage(lastNameError);
-    return;
-  }
-
-  // Username Validation
-  const usernameError = validateUsername(username);
-  if (usernameError) {
-    setMessage(usernameError);
-    return;
-  }
-
-  // Email Validation
-  const emailError = validateEmail(email);
-  if (emailError) {
-    setMessage(emailError);
-    return;
-  }
-
-  // Password Validation
-  const passwordError = validatePassword(password);
-  if (passwordError) {
-    setMessage(passwordError);
-    return;
-  }
-
-  const data = await registerUser({
-    first_name: firstName,
-    last_name: lastName,
-    username,
-    email,
-    password,
-    role: "user",
-  });
-
-  if (data.success) {
-      setIsSuccess(true);
-      setMessage(data.message || "Account created successfully! You can now log in.");
-    } else {
+      if (data.success) {
+        setIsSuccess(true);
+        setMessage(data.message || "Account created! Redirecting to login…");
+        setTimeout(() => navigate("/login"), 2800);
+      } else {
+        setIsSuccess(false);
+        setMessage(data.message || "Registration failed. Please try again.");
+      }
+    } catch {
       setIsSuccess(false);
-      setMessage(data.message || "Registration failed. Please try again.");
+      setMessage("Server error. Please try again.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#FBFCFD] flex items-center justify-center p-6 font-sans text-slate-900">
-      <div className="w-full max-w-lg">
-        {/* LOGO AREA */}
-        <div className="flex flex-col items-center mb-8 text-center">
-          <div className="bg-slate-900 text-white p-3 rounded-2xl shadow-xl mb-4">
-            <Repeat size={32} />
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.5 }}
+      style={{
+        minHeight: "100vh", display: "flex", alignItems: "center",
+        justifyContent: "center", padding: "24px 16px",
+        background: "#F6FAFD", position: "relative",
+        overflow: "hidden", fontFamily: "sans-serif",
+      }}
+    >
+      {/* ── Atmospheric Background ── */}
+      <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
+        <div style={{
+          position: "absolute", top: "-10%", right: "-5%",
+          width: 600, height: 600, borderRadius: "50%",
+          background: "radial-gradient(ellipse, rgba(75,153,212,0.12) 0%, transparent 70%)",
+        }} />
+        <div style={{
+          position: "absolute", bottom: "-15%", left: "-10%",
+          width: 500, height: 500, borderRadius: "50%",
+          background: "radial-gradient(ellipse, rgba(37,99,235,0.07) 0%, transparent 70%)",
+        }} />
+        <div style={{
+          position: "absolute", inset: 0,
+          backgroundImage: "linear-gradient(rgba(75,153,212,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(75,153,212,0.05) 1px, transparent 1px)",
+          backgroundSize: "52px 52px",
+        }} />
+        <div style={{
+          position: "absolute", top: "-10%", right: "30%", width: 1, height: "130%",
+          background: "linear-gradient(180deg, transparent 0%, rgba(75,153,212,0.1) 30%, rgba(75,153,212,0.1) 70%, transparent 100%)",
+          transform: "rotate(15deg)",
+        }} />
+      </div>
+
+      <div style={{ width: "100%", maxWidth: 480, position: "relative", zIndex: 10 }}>
+
+        {/* ── Logo ── */}
+        <motion.div
+          initial={{ opacity: 0, y: -18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28 }}
+        >
+          <div style={{
+            background: "linear-gradient(135deg, #1e293b, #0f172a)",
+            boxShadow: "0 6px 20px rgba(15,23,42,0.25)",
+            padding: 10, borderRadius: 14, marginBottom: 14,
+          }}>
+            <Repeat size={22} color="#ffffff" />
           </div>
-          <h1 className="text-3xl font-black tracking-tighter uppercase italic">
-            Trade<span className="text-[#4B99D4]">&</span>Talk
+          <h1 style={{
+            fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em",
+            textTransform: "uppercase", fontStyle: "italic",
+            color: "#0f172a", margin: 0, lineHeight: 1,
+          }}>
+            Trade<span style={{ color: "#4B99D4" }}>&</span>Talk
           </h1>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-2">Join the Elite Club</p>
-        </div>
+          <p style={{
+            fontSize: 10, fontWeight: 900, color: "#94a3b8",
+            letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 6,
+          }}>
+            Join the Elite Club
+          </p>
+        </motion.div>
 
-        {/* REGISTER CARD */}
-        <div className="bg-white p-8 md:p-10 rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,0.04)] border border-slate-100">
-          <h2 className="text-2xl font-black text-slate-800 uppercase italic tracking-tighter mb-8 text-center">Create Account</h2>
-          
-          <form onSubmit={handleRegister} className="space-y-4">
-            {/* NAME ROW */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">First Name</label>
-                <input
-                  type="text"
-                  placeholder="John"
-                  value={firstName}
+        {/* ── Card ── */}
+        <motion.div
+          initial={{ opacity: 0, y: 28, scale: 0.97 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.65, delay: 0.08, ease: [0.22, 1, 0.36, 1] }}
+          style={{
+            background: "#ffffff",
+            borderRadius: 28, overflow: "hidden",
+            border: "1px solid rgba(75,153,212,0.14)",
+            boxShadow: "0 4px 6px rgba(15,23,42,0.04), 0 20px 50px rgba(75,153,212,0.09)",
+          }}
+        >
+         
+
+          <div style={{ padding: "32px 36px 36px" }}>
+
+            {/* Card Header */}
+            <div style={{ textAlign: "center", marginBottom: 28 }}>
+              <h2 style={{
+                fontSize: 22, fontWeight: 900, textTransform: "uppercase",
+                fontStyle: "italic", letterSpacing: "-0.03em",
+                color: "#0f172a", margin: "0 0 6px",
+              }}>
+                Create Account
+              </h2>
+              <p style={{ fontSize: 13, color: "#64748b", fontWeight: 600, margin: 0 }}>
+                Start your collector journey today
+              </p>
+            </div>
+
+            {/* Form */}
+            <motion.form
+              onSubmit={handleRegister}
+              variants={stagger}
+              initial="hidden"
+              animate="visible"
+              style={{ display: "flex", flexDirection: "column", gap: 16 }}
+            >
+              {/* Name row */}
+              <motion.div variants={fadeUp} style={{ display: "flex", gap: 16 }}>
+                <SmartInput
+                  label="First Name" type="text" value={firstName}
                   onChange={(e) => setFirstName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 py-3 px-4 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-[#4B99D4] transition-all"
-                  required
+                  placeholder="John" required half
                 />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Last Name</label>
-                <input
-                  type="text"
-                  placeholder="Doe"
-                  value={lastName}
+                <SmartInput
+                  label="Last Name" type="text" value={lastName}
                   onChange={(e) => setLastName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 py-3 px-4 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-[#4B99D4] transition-all"
-                  required
+                  placeholder="Doe" required half
                 />
-              </div>
-            </div>
+              </motion.div>
 
-            {/* USERNAME */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Username</label>
-              <div className="relative group">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#4B99D4] transition-colors" size={18} />
-                <input
-                  type="text"
-                  placeholder="TheCollector77"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 py-3 pl-12 pr-4 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-[#4B99D4] transition-all"
-                  required
-                />
-              </div>
-            </div>
+              <SmartInput
+                icon={User} label="Username" type="text" value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="TheCollector77" required
+              />
+              <SmartInput
+                icon={Mail} label="Email" type="email" value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com" required
+              />
 
-            {/* EMAIL */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email</label>
-              <div className="relative group">
-                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#4B99D4] transition-colors" size={18} />
-                <input
-                  type="email"
-                  placeholder="your@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 py-3 pl-12 pr-4 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-[#4B99D4] transition-all"
-                  required
-                />
-              </div>
-            </div>
-
-            {/* PASSWORD WITH TOGGLE */}
-            <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Password</label>
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#4B99D4] transition-colors" size={18} />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 py-3 pl-12 pr-12 rounded-xl text-sm font-bold outline-none focus:bg-white focus:border-[#4B99D4] transition-all"
-                  required
-                />
+              <SmartInput
+                icon={Lock} label="Password" type={showPassword ? "text" : "password"}
+                value={password} onChange={(e) => setPassword(e.target.value)}
+                placeholder="Min. 8 chars, 1 uppercase, 1 symbol" required
+              >
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors"
+                  style={{
+                    position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
+                    background: "none", border: "none", cursor: "pointer",
+                    color: "#94a3b8", padding: 4, display: "flex", alignItems: "center",
+                  }}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
-              </div>
+              </SmartInput>
+
+              {/* Message */}
+              <AnimatePresence mode="wait">
+                {message && (
+                  <motion.div
+                    key="msg"
+                    initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }} transition={{ duration: 0.2 }}
+                    style={{
+                      display: "flex", alignItems: "flex-start", gap: 10,
+                      padding: "12px 14px", borderRadius: 12,
+                      fontSize: 12, fontWeight: 700,
+                      ...(isSuccess
+                        ? { background: "rgba(16,185,129,0.07)", border: "1.5px solid rgba(16,185,129,0.2)", color: "#059669" }
+                        : { background: "rgba(239,68,68,0.06)", border: "1.5px solid rgba(239,68,68,0.18)", color: "#dc2626" }
+                      ),
+                    }}
+                  >
+                    {isSuccess
+                      ? <CheckCircle2 size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                      : <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                    }
+                    {message}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Submit */}
+              <motion.div variants={fadeUp} style={{ paddingTop: 4 }}>
+                <MagneticButton
+                  type="submit" disabled={isLoading || isSuccess}
+                  style={{
+                    width: "100%", padding: "15px 24px",
+                    borderRadius: 16, fontWeight: 900,
+                    textTransform: "uppercase", letterSpacing: "0.16em",
+                    fontSize: 13, color: "#ffffff", border: "none",
+                    cursor: (isLoading || isSuccess) ? "not-allowed" : "pointer",
+                    background: (isLoading || isSuccess)
+                      ? "rgba(75,153,212,0.5)"
+                      : "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+                    boxShadow: (isLoading || isSuccess) ? "none" : "0 8px 28px rgba(15,23,42,0.25)",
+                    display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
+                  }}
+                >
+                  {isLoading ? (
+                    <>
+                      <motion.div
+                        style={{
+                          width: 16, height: 16, borderRadius: "50%",
+                          border: "2.5px solid rgba(255,255,255,0.4)",
+                          borderTopColor: "#ffffff",
+                        }}
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 0.75, repeat: Infinity, ease: "linear" }}
+                      />
+                      Creating Account…
+                    </>
+                  ) : (
+                    <>
+                      Create Account
+                      <ArrowRight size={15} />
+                    </>
+                  )}
+                </MagneticButton>
+              </motion.div>
+            </motion.form>
+
+            {/* Footer links */}
+            <div style={{
+              marginTop: 24, paddingTop: 22,
+              borderTop: "1px solid #f1f5f9",
+              display: "flex", flexDirection: "column",
+              alignItems: "center", gap: 12,
+            }}>
+              <Link to="/login" style={{
+                fontSize: 11, fontWeight: 800, color: "#64748b",
+                textDecoration: "none", letterSpacing: "0.06em",
+                textTransform: "uppercase",
+              }}>
+                Already have an account?{" "}
+                <span style={{ color: "#4B99D4" }}>Login</span>
+              </Link>
+              <Link to="/" style={{
+                fontSize: 10, fontWeight: 900, color: "#94a3b8",
+                textDecoration: "none", letterSpacing: "0.2em",
+                textTransform: "uppercase",
+              }}>
+                ← Back to Home
+              </Link>
             </div>
-
-            {message && (
-              <div className={`flex items-start gap-2 p-3.5 rounded-xl text-xs font-bold ${
-                isSuccess
-                  ? "bg-emerald-50 text-emerald-600 border border-emerald-100"
-                  : "bg-rose-50 text-rose-600 border border-rose-100"
-              }`}>
-                {isSuccess
-                  ? <CheckCircle2 className="shrink-0" size={16} />
-                  : <AlertCircle className="shrink-0" size={16} />
-                }
-                {message}
-              </div>
-            )}
-
-            <button 
-              type="submit" 
-              className="group w-full bg-slate-900 text-white py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-[#4B99D4] transition-all shadow-xl shadow-slate-200 flex items-center justify-center gap-2 active:scale-95 mt-4"
-            >
-              Sign Up <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
-            </button>
-          </form>
-
-          <div className="mt-8 pt-6 border-t border-slate-50 flex flex-col items-center gap-4 text-center">
-            <Link to="/login" className="text-xs font-bold text-slate-400 hover:text-slate-900">
-              Already Have an Account? <span className="text-[#4B99D4]  tracking-tighter ml-1">Login Now</span>
-            </Link>
-            <Link to="/" className="text-[10px] font-black text-slate-300 hover:text-slate-500 uppercase tracking-widest">
-              Back To Home
-            </Link>
           </div>
-        </div>
+        </motion.div>
       </div>
-    </div>
+    </motion.div>
   );
 };
+
 export default Register;

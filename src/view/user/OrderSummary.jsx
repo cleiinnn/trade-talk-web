@@ -148,9 +148,6 @@ const OrderSummary = () => {
           </button>
           <button onClick={() => navigate("/messages", {
             state: {
-              listing_id:     summary.listing_id,
-              listing_title:  summary.listing_title,
-              listing_image:  summary.listing_image,
               other_user_id:  summary.seller_id,
               other_username: summary.seller_name,
             }

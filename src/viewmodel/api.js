@@ -1,5 +1,13 @@
 import axios from "axios";
 
+// Only send ngrok header when using an ngrok URL to avoid CORS preflight failures.
+const NGROK_HEADER = "ngrok-skip-browser-warning";
+if (import.meta.env.VITE_API_BASE_URL?.includes("ngrok")) {
+  axios.defaults.headers.common[NGROK_HEADER] = "true";
+} else {
+  delete axios.defaults.headers.common[NGROK_HEADER];
+}
+
 // VITE_API_BASE_URL=https://yourserver.com/backend
 const BASE = import.meta.env.VITE_API_BASE_URL;
 

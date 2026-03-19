@@ -309,6 +309,16 @@ const ProductDetail = () => {
                   Propose Trade
                 </button>
                 <button
+                  onClick={() => {
+                    if (!user) return navigate("/login");
+                    navigate("/messages", {
+                      state: {
+                        other_user_id: item.user_id,
+                        other_username: item.seller,
+                        other_avatar: item.seller_profile_picture_url,
+                      }
+                    });
+                  }}
                   className="flex-1 flex items-center justify-center bg-slate-100 text-slate-700 rounded-2xl hover:bg-slate-200 transition-colors focus:outline-none focus:ring-2 focus:ring-[#4B99D4] focus:ring-offset-2 min-h-[44px]"
                   aria-label="Open chat with seller"
                 >

@@ -1,16 +1,17 @@
 ﻿import React, { useEffect, useState, useMemo, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Search, MessageCircle, Star, Flame, Repeat, Sparkles, Boxes, 
-  Users, Heart, Bell, PlusCircle, BookOpen, X, ChevronDown, Coins
+  Users, Heart, Bell, PlusCircle, BookOpen, X, ChevronDown, Coins, LayoutGrid
 } from "lucide-react";
 
-// Import the UI object from your central styles folder
 import { ui } from "../styles/home.styles.js";
 import { BASE } from "../../viewmodel/constants";
 
-/* --- HELPER COMPONENTS --- */
+/* ─── HELPER COMPONENTS ─────────────────────────────────────────────────────── */
+
 const MenuLink = ({ label, active = false, onClick }) => (
   <button 
     onClick={onClick}
@@ -23,21 +24,24 @@ const MenuLink = ({ label, active = false, onClick }) => (
   </button>
 );
 
-// IconButton now accepts onClick and passes it to the div
 const IconButton = ({ icon, badge, hoverColor, onClick }) => (
   <div 
     className={`relative cursor-pointer transition-colors ${hoverColor} text-slate-500`}
     onClick={onClick}
   >
     {icon}
-    {badge && <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-md bg-red-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white">{badge}</span>}
+    {badge && (
+      <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-md bg-red-500 text-[9px] font-black text-white shadow-sm ring-2 ring-white">
+        {badge}
+      </span>
+    )}
   </div>
 );
 
 const SORT_OPTIONS = [
-  { value: "newest",    label: "Newest First" },
-  { value: "price_asc", label: "Price: Low → High" },
-  { value: "price_desc",label: "Price: High → Low" },
+  { value: "newest",     label: "Newest First" },
+  { value: "price_asc",  label: "Price: Low → High" },
+  { value: "price_desc", label: "Price: High → Low" },
 ];
 
 const SortDropdown = ({ sortBy, setSortBy }) => {
@@ -85,40 +89,26 @@ const Toast = ({ toasts }) => (
   </div>
 );
 
-// StarRating: filled/half/empty stars + score + review count
 const StarRating = ({ rating, count }) => {
   const score = Number(rating);
   const hasRating = score > 0;
-
-  if (!hasRating) return (
-    <p className="text-[10px] text-slate-400 font-medium italic mt-1">No ratings yet</p>
-  );
-
-  const fullStars  = Math.floor(score);
-  const halfStar   = score - fullStars >= 0.25 && score - fullStars < 0.75;
-  const roundedUp  = score - fullStars >= 0.75 ? fullStars + 1 : fullStars;
-
+  if (!hasRating) return <p className="text-[10px] text-slate-400 font-medium italic mt-1">No ratings yet</p>;
+  const fullStars = Math.floor(score);
+  const halfStar  = score - fullStars >= 0.25 && score - fullStars < 0.75;
+  const roundedUp = score - fullStars >= 0.75 ? fullStars + 1 : fullStars;
   return (
     <div className="flex items-center gap-1 mt-1">
       <div className="flex items-center gap-0.5">
         {[1, 2, 3, 4, 5].map(i => (
-          <Star
-            key={i}
-            size={11}
-            className={
-              i <= roundedUp
-                ? "fill-amber-400 text-amber-400"
-                : i === fullStars + 1 && halfStar
-                ? "fill-amber-200 text-amber-300"
-                : "fill-slate-200 text-slate-200"
-            }
-          />
+          <Star key={i} size={11} className={
+            i <= roundedUp ? "fill-amber-400 text-amber-400"
+            : i === fullStars + 1 && halfStar ? "fill-amber-200 text-amber-300"
+            : "fill-slate-200 text-slate-200"
+          } />
         ))}
       </div>
       <span className="text-[10px] font-black text-slate-700">{score.toFixed(1)}</span>
-      {Number(count) > 0 && (
-        <span className="text-[10px] text-slate-400 font-medium">({count})</span>
-      )}
+      {Number(count) > 0 && <span className="text-[10px] text-slate-400 font-medium">({count})</span>}
     </div>
   );
 };
@@ -126,45 +116,263 @@ const StarRating = ({ rating, count }) => {
 const getCurrentUser = () => {
   const userStr = sessionStorage.getItem("user");
   if (!userStr) return null;
-  try { 
-    return JSON.parse(userStr); 
-  } catch {
-     return null; }
+  try { return JSON.parse(userStr); } catch { return null; }
 };
 
 const resolveNotificationLink = (rawLink) => {
   if (typeof rawLink !== "string") return null;
   const link = rawLink.trim();
   if (!link) return null;
-
   if (/^https?:\/\//i.test(link)) {
     try {
       const url = new URL(link);
-      if (url.origin === window.location.origin || url.hostname === "localhost") {
+      if (url.origin === window.location.origin || url.hostname === "localhost")
         return `${url.pathname}${url.search}${url.hash}`;
-      }
       window.open(link, "_blank", "noopener,noreferrer");
       return null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
-
   if (link.startsWith("/")) return link;
   return `/${link.replace(/^\.?\//, "")}`;
 };
 
-// Icon mapping for categories
+/* ─── CATEGORY CONFIG ────────────────────────────────────────────────────────── */
+
+// Icon mapping — used when no photo is available (fallback)
 const categoryIcons = {
-  'Cards': Sparkles,
+  'Cards':               Sparkles,
   'Mystery/Blind Boxes': Boxes,
-  'Figures': Flame,
-  'Comic Books': BookOpen,
-  'Memorabilia': Star,
-  'Coins': Coins,
+  'Figures':             Flame,
+  'Comic Books':         BookOpen,
+  'Memorabilia':         Star,
+  'Coins':               Coins,
 };
 
-/* --- MAIN COMPONENT --- */
+// Per-category colour config — used for the icon bubble bg + icon colour
+// When a photo is available, the bg colour shows behind the photo as a tint.
+const categoryVisuals = {
+  'All':                 { bg: 'bg-slate-100',    iconColor: 'text-slate-600'   },
+  'Cards':               { bg: 'bg-amber-50',      iconColor: 'text-amber-500'   },
+  'Mystery/Blind Boxes': { bg: 'bg-violet-50',     iconColor: 'text-violet-500'  },
+  'Figures':             { bg: 'bg-sky-50',         iconColor: 'text-sky-500'     },
+  'Comic Books':         { bg: 'bg-emerald-50',    iconColor: 'text-emerald-500' },
+  'Memorabilia':         { bg: 'bg-rose-50',        iconColor: 'text-rose-500'    },
+  'Coins':               { bg: 'bg-yellow-50',     iconColor: 'text-yellow-600'  },
+};
+const defaultVisual = { bg: 'bg-[#D9E9EE]', iconColor: 'text-[#4B99D4]' };
+
+/* ─── CATEGORY MEGA-MENU ─────────────────────────────────────────────────────── */
+const CategoryMegaMenu = ({ dynamicCategories, listings, selectedCategory, setSelectedCategory }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const ref = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setIsOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  // ── Derive one preview photo per category (newest listing with an image) ───
+  // Zero backend changes — reads from the already-fetched listings array.
+  const previewImageByCategory = useMemo(() => {
+    const map = {};
+    [...listings]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .forEach(l => {
+        const cat = l.category_name ?? l.category;
+        if (cat && l.image_url && !map[cat]) map[cat] = l.image_url;
+      });
+    return map;
+  }, [listings]);
+
+  // "All" tile: up to 3 newest photos as a mini triptych inside the icon bubble
+  const allPreviewImages = useMemo(() =>
+    [...listings]
+      .filter(l => l.image_url)
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 3)
+      .map(l => l.image_url),
+  [listings]);
+
+  // Live listing counts per category
+  const countByCategory = useMemo(() => {
+    const counts = {};
+    listings.forEach(l => {
+      const cat = l.category_name ?? l.category;
+      if (cat) counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return counts;
+  }, [listings]);
+
+  // Build unified tile list: "All" first, then dynamic categories
+  const allTiles = useMemo(() => [
+    { name: 'All', icon: LayoutGrid },
+    ...dynamicCategories.map(cat => ({
+      name: cat.category_name,
+      icon: categoryIcons[cat.category_name] || Boxes,
+    })),
+  ], [dynamicCategories]);
+
+  const isCategoryActive = selectedCategory !== 'All';
+
+  return (
+    <div ref={ref} className="relative">
+
+      {/* ── Trigger — original "Categories" text link style ─────────────────── */}
+      <button
+        onClick={() => setIsOpen(o => !o)}
+        className={`relative flex items-center gap-1.5 text-xs font-black uppercase tracking-widest transition-all pb-1 hover:text-slate-900 ${
+          isOpen || isCategoryActive ? "text-slate-900" : "text-slate-500"
+        }`}
+      >
+        Categories
+        <ChevronDown size={12} className={`transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
+        {isCategoryActive && (
+          <span className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#4B99D4] rounded-full" />
+        )}
+        {isOpen && !isCategoryActive && (
+          <motion.span layoutId="catUnderline" className="absolute -bottom-1 left-0 w-full h-0.5 bg-[#4B99D4] rounded-full" />
+        )}
+      </button>
+
+      {/* ── Mega-menu dropdown ───────────────────────────────────────────────── */}
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: -8, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0,  scale: 1    }}
+            exit={{   opacity: 0, y: -8,  scale: 0.97 }}
+            transition={{ duration: 0.22, ease: [0.23, 1, 0.32, 1] }}
+            className={ui.categoryMegaMenu.container}
+          >
+            {/* ── Sticky header — never scrolls away ─────────────────────── */}
+            <div className="flex-shrink-0 px-6 pt-5 pb-4">
+              <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#4B99D4] mb-0.5">
+                Collector's Vault
+              </p>
+              <div className="flex items-end justify-between">
+                <h3 className="text-xl font-black text-slate-900 tracking-tight">
+                  Browse Collections
+                </h3>
+                {isCategoryActive && (
+                  <button
+                    onClick={() => { setSelectedCategory('All'); setIsOpen(false); }}
+                    className="flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-[#4B99D4] transition-colors"
+                  >
+                    <X size={10} /> Clear Filter
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className={ui.categoryMegaMenu.divider} />
+
+            {/* ── Scrollable grid body ────────────────────────────────────── */}
+            <div className={ui.categoryMegaMenu.gridBody}>
+              <div className={ui.categoryMegaMenu.gridContainer}>
+                {allTiles.map((tile, i) => {
+                  const Icon    = tile.icon;
+                  const visual  = categoryVisuals[tile.name] || defaultVisual;
+                  const count   = tile.name === 'All' ? listings.length : (countByCategory[tile.name] || 0);
+                  const isActive = selectedCategory === tile.name;
+
+                  // ── Photo logic ──────────────────────────────────────────
+                  // "All" → mini triptych inside the icon bubble
+                  // Other → single photo filling the icon bubble
+                  // No listings → icon fallback (original behaviour)
+                  const singlePhoto = tile.name === 'All' ? null : (previewImageByCategory[tile.name] || null);
+                  const hasPhoto    = tile.name === 'All'
+                    ? allPreviewImages.length > 0
+                    : !!singlePhoto;
+
+                  return (
+                    <motion.button
+                      key={tile.name}
+                      whileHover={{ scale: 1.05, boxShadow: "0 8px 30px rgba(75, 153, 212, 0.22)" }}
+                      whileTap={{ scale: 0.96 }}
+                      transition={{ type: "spring", stiffness: 400, damping: 22 }}
+                      onClick={() => { setSelectedCategory(tile.name); setIsOpen(false); }}
+                      className={ui.categoryMegaMenu.itemTile(isActive)}
+                    >
+                      {/* Active dot */}
+                      {isActive && <span className={ui.categoryMegaMenu.activeDot} />}
+
+                      {/* ── Icon / Photo bubble ──────────────────────────── */}
+                      <div className={`${ui.categoryMegaMenu.itemIcon} ${visual.bg}`}>
+
+                        {tile.name === 'All' && hasPhoto ? (
+                          /* Mini triptych — up to 3 panels inside the 56×56 bubble */
+                          <div className="absolute inset-0 flex">
+                            {allPreviewImages.map((src, idx) => (
+                              <div key={idx} className="relative flex-1 overflow-hidden">
+                                <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                              </div>
+                            ))}
+                            {/* Hairline dividers between panels */}
+                            {allPreviewImages.length > 1 && (
+                              <div className="absolute inset-y-0 left-1/3 w-px bg-white/60 z-10" />
+                            )}
+                            {allPreviewImages.length > 2 && (
+                              <div className="absolute inset-y-0 left-2/3 w-px bg-white/60 z-10" />
+                            )}
+                          </div>
+
+                        ) : tile.name === 'All' ? (
+                          /* "All" with no listings — icon fallback */
+                          <Icon size={22} className={visual.iconColor} />
+
+                        ) : hasPhoto ? (
+                          /* Single real product photo filling the bubble */
+                          <>
+                            <img
+                              src={singlePhoto}
+                              alt={tile.name}
+                              className={ui.categoryMegaMenu.tilePhoto}
+                            />
+                            {/* Live badge — only on photo tiles, sits at bottom of bubble */}
+                            <span className={ui.categoryMegaMenu.liveBadge}>
+                              <span className={ui.categoryMegaMenu.liveDot} />
+                              {count} Live
+                            </span>
+                          </>
+
+                        ) : (
+                          /* No listings yet — original icon fallback */
+                          <Icon size={22} className={visual.iconColor} />
+                        )}
+                      </div>
+
+                      {/* Category name — original style */}
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-800 leading-tight">
+                        {tile.name}
+                      </p>
+
+                      {/* Count label — original style */}
+                      <p className="text-[9px] font-bold text-slate-400">
+                        {count > 0 ? `${count} Listing${count !== 1 ? 's' : ''}` : 'Coming Soon'}
+                      </p>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* ── Pinned footer — original style ──────────────────────────── */}
+            <div className={ui.categoryMegaMenu.divider} />
+            <div className={ui.categoryMegaMenu.footer} onClick={() => setIsOpen(false)}>
+              <LayoutGrid size={12} />
+              Viewing {selectedCategory === 'All' ? 'All Collections' : selectedCategory}
+            </div>
+
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+};
+
+/* ─── MAIN COMPONENT ─────────────────────────────────────────────────────────── */
 const Home = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
@@ -181,34 +389,27 @@ const Home = () => {
   const [toasts, setToasts] = useState([]);
   const notifRef = useRef(null);
 
-  // Toast helper
   const showToast = (message, icon) => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, message, icon }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 2500);
   };
 
-  // Fetch categories on mount
   useEffect(() => {
     const fetchCategories = async () => {
       try {
         const res = await axios.get(`${BASE}/get_meta.php`);
         setDynamicCategories(res.data.categories || []);
-      } catch (err) {
-        console.error("Failed to fetch categories", err);
-      }
+      } catch (err) { console.error("Failed to fetch categories", err); }
     };
     fetchCategories();
   }, []);
-  
-  // 1. Fetch Notifications
+
   const fetchNotifications = async (userId) => {
     try {
       const res = await axios.get(`${BASE}/get_notifications.php?user_id=${userId}`);
       setNotifications(Array.isArray(res.data) ? res.data : []);
-    } catch (err) {
-      console.error("Error fetching notifications:", err);
-    }
+    } catch (err) { console.error("Error fetching notifications:", err); }
   };
 
   useEffect(() => {
@@ -219,38 +420,25 @@ const Home = () => {
       return;
     }
     setUser(currentUser);
-
     const fetchInitialData = async () => {
       try {
         setLoading(true);
-
-        // Fetch Listings and Favorites
         const [listingsRes, favsRes] = await Promise.all([
           axios.get(`${BASE}/get_listings.php`, { withCredentials: true }),
           axios.get(`${BASE}/get_user_favorites.php?user_id=${currentUser.user_id}`)
         ]);
-        
-        // Ensure listings are always arrays
         const listingsData = Array.isArray(listingsRes.data) ? listingsRes.data : [];
         setListings(listingsData);
         setFilteredListings(listingsData);
-
-        // Process Favorites into simple ID array
         const favData = Array.isArray(favsRes.data) ? favsRes.data : [];
-        const favoriteIds = favData.map(item => String(item.listing_id ?? item.id ?? item));
-        setFavorites(favoriteIds);
-      } catch (err) {
-        console.error("Initialization error:", err);
-      } finally {
-        setLoading(false);
-      }
+        setFavorites(favData.map(item => String(item.listing_id ?? item.id ?? item)));
+      } catch (err) { console.error("Initialization error:", err); }
+      finally { setLoading(false); }
     };
-
     fetchInitialData();
     fetchNotifications(currentUser.user_id);
   }, [navigate]);
 
-  // 2. Toggle Favorites
   const toggleFavorite = async (listingId) => {
     if (!user) return;
     try {
@@ -260,9 +448,8 @@ const Home = () => {
       });
       if (res.data.success) {
         const wasLiked = favorites.includes(String(listingId));
-        setFavorites(prev => prev.includes(String(listingId)) 
-          ? prev.filter(id => id !== String(listingId)) 
-          : [...prev, String(listingId)]
+        setFavorites(prev =>
+          wasLiked ? prev.filter(id => id !== String(listingId)) : [...prev, String(listingId)]
         );
         showToast(
           wasLiked ? "Removed from favorites" : "Added to favorites",
@@ -271,60 +458,44 @@ const Home = () => {
             : <Heart size={14} fill="currentColor" className="text-red-400" />
         );
       }
-    } catch (err) {
-      console.error("Failed to update favorite", err);
-    }
+    } catch (err) { console.error("Failed to update favorite", err); }
   };
 
-  // 3. Mark Notifications
   const markAsRead = async () => {
     if (unreadCount === 0 || !user) return;
     try {
-      await axios.post(`${BASE}/mark_notifications_read.php`, {
-        user_id: user.user_id
-      });
+      await axios.post(`${BASE}/mark_notifications_read.php`, { user_id: user.user_id });
       setNotifications(prev => prev.map(n => ({ ...n, is_read: 1 })));
-    } catch (err) {
-      console.error("Failed to mark notifications as read:", err);
-    }
+    } catch (err) { console.error("Failed to mark notifications as read:", err); }
   };
 
-    // Filter listings by category and search
   useEffect(() => {
     let filtered = listings;
-    if (selectedCategory !== "All") {
+    if (selectedCategory !== "All")
       filtered = filtered.filter(item => (item.category_name ?? item.category) === selectedCategory);
-    }
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(item =>
-        item.title?.toLowerCase().includes(term) ||
-        item.seller?.toLowerCase().includes(term)
+        item.title?.toLowerCase().includes(term) || item.seller?.toLowerCase().includes(term)
       );
     }
     setFilteredListings(filtered);
   }, [selectedCategory, searchTerm, listings]);
 
-  // Helper to determine if listing is new (within 7 days)
   const isNew = (dateString) => {
-    const now = new Date();
-    const created = new Date(dateString);
-    const diffDays = (now - created) / (1000 * 60 * 60 * 24);
+    const diffDays = (new Date() - new Date(dateString)) / (1000 * 60 * 60 * 24);
     return diffDays <= 7;
   };
 
   const unreadCount = notifications.filter(n => Number(n.is_read) === 0).length;
 
-  // Sort filteredListings based on sortBy
   const sortedListings = useMemo(() => {
     const arr = [...filteredListings];
     if (sortBy === "price_asc")  return arr.sort((a, b) => Number(a.price) - Number(b.price));
     if (sortBy === "price_desc") return arr.sort((a, b) => Number(b.price) - Number(a.price));
-    // newest: default — sort by created_at descending
     return arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   }, [filteredListings, sortBy]);
 
-  // Outside-click closes notification dropdown
   useEffect(() => {
     const handler = (e) => { if (notifRef.current && !notifRef.current.contains(e.target)) setShowNotifDropdown(false); };
     document.addEventListener("mousedown", handler);
@@ -335,7 +506,8 @@ const Home = () => {
 
   return (
     <div className={`${ui.layout} bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:32px_32px]`}>
-      {/* --- HEADER --- */}
+
+      {/* ── HEADER ─────────────────────────────────────────────────────────── */}
       <header className={`${ui.header} sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b-2 border-slate-100`}>
         <div className={ui.navBar}>
           <div className="flex items-center gap-2">
@@ -378,12 +550,11 @@ const Home = () => {
                   hoverColor="hover:text-red-500" 
                 />
               </div>
-              
+
               <div className="relative" ref={notifRef}>
                 <div onClick={() => { setShowNotifDropdown(!showNotifDropdown); if (!showNotifDropdown) markAsRead(); }}>
                   <IconButton icon={<Bell size={22} />} badge={unreadCount > 0 ? unreadCount : null} hoverColor="hover:text-blue-500" />
                 </div>
-
                 {showNotifDropdown && (
                   <div className={ui.notifDropdown}>
                     <div className={ui.notifHeader}>
@@ -391,17 +562,17 @@ const Home = () => {
                       <span className="bg-[#4B99D4] text-white text-[10px] px-2 py-0.5 rounded-full font-bold">{unreadCount} New</span>
                     </div>
                     <div className="max-h-[400px] overflow-y-auto">
-	                      {notifications.length > 0 ? (
-	                        notifications.map((n) => (
-	                          <div 
-	                            key={n.notification_id} 
-	                            className={`${ui.notifItem(Number(n.is_read) === 1)} cursor-pointer hover:bg-slate-100`}
-	                            onClick={() => {
-	                              const targetLink = resolveNotificationLink(n.link);
-	                              if (targetLink) navigate(targetLink);
-	                              setShowNotifDropdown(false);
-	                            }}
-	                          >
+                      {notifications.length > 0 ? (
+                        notifications.map((n) => (
+                          <div 
+                            key={n.notification_id} 
+                            className={`${ui.notifItem(Number(n.is_read) === 1)} cursor-pointer hover:bg-slate-100`}
+                            onClick={() => {
+                              const targetLink = resolveNotificationLink(n.link);
+                              if (targetLink) navigate(targetLink);
+                              setShowNotifDropdown(false);
+                            }}
+                          >
                             <p className="text-xs font-bold text-slate-700 leading-relaxed">{n.message}</p>
                             <p className="text-[10px] text-slate-500 mt-2 font-medium">{new Date(n.created_at).toLocaleDateString()}</p>
                           </div>
@@ -414,13 +585,12 @@ const Home = () => {
                 )}
               </div>
 
-                {/* Messages icon - now clickable */}
-                  <IconButton 
-                    icon={<MessageCircle size={22} />} 
-                    hoverColor="hover:text-blue-500"
-                    onClick={() => navigate("/messages")}
-                  />
-                </div>
+              <IconButton 
+                icon={<MessageCircle size={22} />} 
+                hoverColor="hover:text-blue-500"
+                onClick={() => navigate("/messages")}
+              />
+            </div>
 
             <div onClick={() => navigate("/profile")} className="flex items-center gap-3 pl-2 cursor-pointer group hover:bg-slate-50 p-1.5 rounded-2xl transition-all">
               <div className="text-right hidden sm:block">
@@ -438,157 +608,125 @@ const Home = () => {
           </div>
         </div>
 
-
-
-        <nav className="flex items-center justify-center gap-12 bg-white py-3 border-y border-slate-100 shadow-sm">
-          <MenuLink label="Dashboard" active={window.location.pathname === "/home"} onClick={() => navigate("/home")}/>
-
-          {/* Update this line below */}
-         <MenuLink label="Showcase" active={window.location.pathname === "/showcase"} onClick={() => navigate("/showcase")}/>
-          <MenuLink label="Orders" active={window.location.pathname === "/orders"} onClick={() => navigate("/orders")} />
-         <MenuLink label="Groups" active={window.location.pathname === "/groups"} onClick={() => navigate("/groups")} />
-          <MenuLink label="Purchase" active={window.location.pathname === "/purchase"} onClick={() => navigate("/purchase")} />
-          <MenuLink label="Settings" />
+        {/* ── Secondary nav ─────────────────────────────────────────────────── */}
+        <nav className="relative flex items-center justify-center gap-12 bg-white py-3 border-y border-slate-100 shadow-sm">
+          <MenuLink label="Dashboard" active={window.location.pathname === "/home"}     onClick={() => navigate("/home")} />
+          <MenuLink label="Showcase"  active={window.location.pathname === "/showcase"} onClick={() => navigate("/showcase")} />
+          <MenuLink label="Orders"    active={window.location.pathname === "/orders"}   onClick={() => navigate("/orders")} />
+          <MenuLink label="Groups"    active={window.location.pathname === "/groups"}   onClick={() => navigate("/groups")} />
+          <MenuLink label="Purchase"  active={window.location.pathname === "/purchase"} onClick={() => navigate("/purchase")} />
+          <CategoryMegaMenu
+            dynamicCategories={dynamicCategories}
+            listings={listings}
+            selectedCategory={selectedCategory}
+            setSelectedCategory={setSelectedCategory}
+          />
         </nav>
       </header>
 
-                  {/* --- MAIN CONTENT --- */}
-            <main className={ui.main}>
-              {/* ── Section header row ─────────────────────────────────────── */}
-              <div className="flex items-center justify-between mb-5">
-                <div>
-                  <p className="text-[#4B99D4] text-xs font-black uppercase tracking-[0.2em] mb-1">Discover</p>
-                  <h2 className="text-3xl font-black text-slate-900 tracking-tight">
-                    {selectedCategory === "All" ? "All Listings" : selectedCategory}
-                    {!loading && (
-                      <span className="ml-3 text-base font-bold text-slate-400">
-                        ({sortedListings.length})
-                      </span>
-                    )}
-                  </h2>
-                </div>
-                <SortDropdown sortBy={sortBy} setSortBy={setSortBy} />
-              </div>
+      {/* ── MAIN CONTENT ─────────────────────────────────────────────────────── */}
+      <main className={ui.main}>
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <p className="text-[#4B99D4] text-xs font-black uppercase tracking-[0.2em] mb-1">Discover</p>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">
+              {selectedCategory === "All" ? "All Listings" : selectedCategory}
+              {!loading && (
+                <span className="ml-3 text-base font-bold text-slate-400">({sortedListings.length})</span>
+              )}
+            </h2>
+          </div>
+          <div className="flex items-center gap-3">
+            {selectedCategory !== "All" && (
+              <motion.button
+                initial={{ opacity: 0, scale: 0.85 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.85 }}
+                onClick={() => setSelectedCategory("All")}
+                className="flex items-center gap-1.5 rounded-xl bg-[#D9E9EE] px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-[#4B99D4] hover:bg-[#4B99D4] hover:text-white transition-all"
+              >
+                <X size={10} /> {selectedCategory}
+              </motion.button>
+            )}
+            <SortDropdown sortBy={sortBy} setSortBy={setSortBy} />
+          </div>
+        </div>
 
-              {/* ── Categories scrollable pill row ─────────────────────────── */}
-              <div className="relative mb-8">
-                {/* fade-out mask on the right to hint at scroll */}
-                <div className="pointer-events-none absolute right-0 top-0 h-full w-16 bg-gradient-to-l from-[#FBFCFD] to-transparent z-10" />
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-hide"
-                     style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}>
-                  {/* All button */}
-                  <button
-                    onClick={() => setSelectedCategory("All")}
-                    className={ui.catBtn(selectedCategory === "All")}
+        {/* ── LISTING GRID ──────────────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-5">
+          {loading ? (
+            <div className="col-span-full py-40 flex flex-col items-center opacity-50">
+              <div className="animate-spin mb-4"><Repeat size={40}/></div>
+              <p className="font-black text-slate-400 uppercase tracking-widest">Loading Collection</p>
+            </div>
+          ) : filteredListings.length === 0 ? (
+            <div className="col-span-full py-40 text-center">
+              <p className="text-xl font-bold text-slate-300 italic">No grails found...</p>
+            </div>
+          ) : sortedListings.map((listing) => {
+            const listingId = listing.listing_id ?? listing.id;
+            const isLiked   = favorites.includes(String(listingId));
+            const itemIsNew = isNew(listing.created_at);
+            return (
+              <div key={listingId} className={ui.card.container}>
+
+                {/* ── Image wrapper — now with a visible border ─────────── */}
+                <div className={ui.card.imageWrapper}>
+                  <Link to={`/product/${listingId}`} className="block h-full w-full">
+                    <div 
+                      className={ui.card.image} 
+                      style={{ backgroundImage: listing.image_url ? `url(${listing.image_url})` : "linear-gradient(to bottom right, #f1f5f9, #e2e8f0)" }} 
+                    />
+                  </Link>
+
+                  {/* Heart button */}
+                  <button 
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleFavorite(listingId); }} 
+                    className={`${ui.button.fav(isLiked)} z-10`}
+                    style={{ position: 'absolute', top: '1.25rem', right: '1.25rem' }} 
                   >
-                    <Boxes size={15} /> All
+                    <Heart size={22} fill={isLiked ? "currentColor" : "none"} className={isLiked ? "animate-pulse" : ""} />
                   </button>
+                </div>
 
-                  {/* Dynamic category buttons */}
-                  {dynamicCategories.map(cat => {
-                    const Icon = categoryIcons[cat.category_name] || Boxes;
-                    return (
-                      <button
-                        key={cat.category_id}
-                        onClick={() => setSelectedCategory(cat.category_name)}
-                        className={ui.catBtn(selectedCategory === cat.category_name)}
-                      >
-                        <Icon size={15} /> {cat.category_name}
-                      </button>
-                    );
-                  })}
+                {/* ── Info section — original layout unchanged ──────────── */}
+                <div className="px-1 mt-2">
+                  <div className="mb-2 flex items-start justify-between">
+                    <div>
+                      <Link to={`/product/${listingId}`}>
+                        <h3 className="text-sm font-black tracking-tight text-slate-800 transition-colors hover:text-[#4B99D4]">
+                          {listing.title}
+                        </h3>
+                      </Link>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
+                        Seller: <span className="text-[#4B99D4]">{listing.seller || "Private"}</span>
+                      </p>
+                      <StarRating rating={listing.seller_avg_rating} count={listing.seller_review_count} />
+                    </div>
+                    {itemIsNew && (
+                      <span className="rounded-lg bg-[#D9E9EE] px-2.5 py-1 text-[9px] font-black uppercase tracking-tighter text-[#4B99D4]">New</span>
+                    )}
+                  </div>
 
-                  {/* Right-side spacer so last item clears the fade mask */}
-                  <span className="flex-shrink-0 w-12" />
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className={ui.price}>
+                      <span className="text-sm font-bold align-top mr-1">{"\u20B1"}</span>
+                      {Number(listing.price).toLocaleString()}
+                    </p>
+                    <button 
+                      onClick={() => navigate('/messages', { state: { other_user_id: listing.seller_id, other_username: listing.seller } })}
+                      className={ui.button.darkIcon}
+                    >
+                      <MessageCircle size={20} />
+                    </button>
+                  </div>
                 </div>
               </div>
+            );
+          })}
+        </div>
+      </main>
 
-              <div className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-5">
-                {loading ? (
-                  <div className="col-span-full py-40 flex flex-col items-center opacity-50">
-                      <div className="animate-spin mb-4"><Repeat size={40}/></div>
-                      <p className="font-black text-slate-400 uppercase tracking-widest">Loading Collection</p>
-                  </div>
-                ) : filteredListings.length === 0 ? (
-                  <div className="col-span-full py-40 text-center"><p className="text-xl font-bold text-slate-300 italic">No grails found...</p></div>
-                ) : (
-                  /* Using ( ) here for implicit return to keep it clean */
-                  sortedListings.map((listing) => {
-                  const listingId = listing.listing_id ?? listing.id;
-                  const isLiked = favorites.includes(String(listingId));
-                  const itemIsNew = isNew(listing.created_at);
-                    return (
-                      <div key={listingId} className={ui.card.container}>
-
-                        {/* Container for Image and Heart */}
-                        <div className={ui.card.imageWrapper}>
-                          
-                          {/* 1. Clickable Image Area */}
-                          <Link to={`/product/${listingId}`} className="block h-full w-full">
-                            <div 
-                              className={ui.card.image} 
-                              style={{ backgroundImage: listing.image_url ? `url(${listing.image_url})` : "linear-gradient(to bottom right, #f1f5f9, #e2e8f0)" }} 
-                            />
-
-                          </Link>
-
-                          {/* 2. Heart Button - Absolute positioned relative to imageWrapper */}
-                          <button 
-                            onClick={(e) => {
-                              e.preventDefault(); 
-                              e.stopPropagation();
-                              toggleFavorite(listingId);
-                            }} 
-                            className={`${ui.button.fav(isLiked)} z-10`}
-                            style={{ position: 'absolute', top: '1.25rem', right: '1.25rem' }} 
-                          >
-                            <Heart size={22} fill={isLiked ? "currentColor" : "none"} className={isLiked ? "animate-pulse" : ""} />
-                          </button>
-                        </div>
-
-                        {/* Info Section Below */}
-                        <div className="px-1 mt-2">
-                          <div className="mb-2 flex items-start justify-between">
-                            <div>
-                              <Link to={`/product/${listingId}`}>
-                                <h3 className="text-sm font-black tracking-tight text-slate-800 transition-colors hover:text-[#4B99D4]">
-                                  {listing.title}
-                                </h3>
-                              </Link>
-                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-0.5">
-                                Seller: <span className="text-[#4B99D4]">{listing.seller || "Private"}</span>
-                              </p>
-                              <StarRating rating={listing.seller_avg_rating} count={listing.seller_review_count} />
-                            </div>
-                            {itemIsNew && (
-                            <span className="rounded-lg bg-[#D9E9EE] px-2.5 py-1 text-[9px] font-black uppercase tracking-tighter text-[#4B99D4]">New</span>
-                            )}
-                            </div>
-
-                          <div className="mt-4 flex items-center justify-between">
-                            <p className={ui.price}><span className="text-sm font-bold align-top mr-1">{"\u20B1"}</span>{Number(listing.price).toLocaleString()}</p>
-                            <button 
-                              onClick={() => navigate('/messages', { 
-                                state: { 
-                                  listing_id: listingId,
-                                  listing_title: listing.title,
-                                  listing_image: listing.image_url,
-                                  other_user_id: listing.seller_id,
-                                  other_username: listing.seller
-                                }
-                              })}
-                              className={ui.button.darkIcon}
-                            >
-                              <MessageCircle size={20} />
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </main>
       <Toast toasts={toasts} />
     </div>
   );

@@ -409,9 +409,6 @@ const Purchase = () => {
   const handleOpenChat = (req) => {
     navigate("/messages", {
       state: {
-        listing_id:     req.listing_id,
-        listing_title:  req.listing_title,
-        listing_image:  req.listing_image,
         other_user_id:  req.seller_id,
         other_username: req.seller_name,
       }
