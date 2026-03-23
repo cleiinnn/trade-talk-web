@@ -85,7 +85,7 @@ const ItemCell = ({ image, title, price, note }) => (
 );
 
 const StatCard = ({ label, value, color, Icon }) => (
-  <div className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center gap-3">
+  (void Icon, <div className="bg-white rounded-2xl border border-slate-100 p-4 flex items-center gap-3">
     <div className={`p-2.5 rounded-xl ${color}`}>
       <Icon size={18} className="text-white" />
     </div>
@@ -93,7 +93,7 @@ const StatCard = ({ label, value, color, Icon }) => (
       <p className="text-2xl font-black text-slate-800">{value ?? "—"}</p>
       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</p>
     </div>
-  </div>
+  </div>)
 );
 
 // ─── Expandable row detail panel ──────────────────────────────────────────────
@@ -201,12 +201,12 @@ const AdminTransactions = () => {
       const res = await axios.get(`${BASE}/get_users.php`, { withCredentials: true });
       const list = Array.isArray(res.data) ? res.data : Array.isArray(res.data?.users) ? res.data.users : [];
       setUsers(list);
-    } catch (err) {
+    } catch {
       setUsers([]);
     }
   };
 
-  useEffect(() => { fetchActivities(); fetchUsers(); }, []);
+  useEffect(() => { fetchActivities(); fetchUsers(); }, [fetchActivities]);
 
   const handleFilterChange = (e) => setFilters({ ...filters, [e.target.name]: e.target.value });
 

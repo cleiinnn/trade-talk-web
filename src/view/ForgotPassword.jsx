@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { forgotPassword } from "../viewmodel/api";
 import { useNavigate, Link } from "react-router-dom";
-import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
+import { AnimatePresence, motion, useMotionValue, useSpring } from "framer-motion";
 import {
   Repeat, Mail, Lock, Eye, EyeOff,
   AlertCircle, CheckCircle2, ArrowRight, ShieldCheck, KeyRound,
@@ -46,6 +46,7 @@ const fadeUp = {
 // ─── INPUT FIELD ──────────────────────────────────────────────────────────────
 const InputField = ({ icon: Icon, label, type, value, onChange, placeholder, required, children }) => {
   const [focused, setFocused] = useState(false);
+  void Icon;
   return (
     <motion.div variants={fadeUp}>
       <label style={{
@@ -86,6 +87,7 @@ const InputField = ({ icon: Icon, label, type, value, onChange, placeholder, req
 
 // ─── FORGOT PASSWORD COMPONENT ────────────────────────────────────────────────
 const ForgotPassword = () => {
+  void motion;
   const navigate = useNavigate();
   const [email, setEmail]             = useState("");
   const [newPassword, setNewPassword] = useState("");

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getReports, actionReport } from "../../viewmodel/api";
 import { useAdminAuth } from "../../hooks/useAdminAuth";
@@ -76,7 +76,7 @@ const ScoreBar = ({ score }) => {
 };
 
 // ── User Credit Drawer ────────────────────────────────────────────────────────
-const CreditDrawer = ({ userId, onClose, adminId }) => {
+const CreditDrawer = ({ userId, onClose }) => {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -392,10 +392,7 @@ const AdminReports = () => {
   const [filter, setFilter]           = useState("pending");
   const [drawerUserId, setDrawerUserId] = useState(null);
 
-  const adminUser = JSON.parse(sessionStorage.getItem("user") || "{}");
-  const adminId   = adminUser?.user_id || 0;
-
-  const fetchReports = async (status = filter) => {
+  const fetchReports = useCallback(async (status = filter) => {
     setLoading(true);
     try {
       const res = await getReports(status ? { status } : {});
@@ -406,9 +403,9 @@ const AdminReports = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filter]);
 
-  useEffect(() => { fetchReports(filter); }, [filter]);
+  useEffect(() => { fetchReports(filter); }, [filter, fetchReports]);
 
   const handleAction = (reportId, action) => {
     // Optimistically update status in UI

@@ -1,11 +1,25 @@
 import React, { useState, useRef } from "react";
 import { registerUser } from "../viewmodel/api";
 import { useNavigate, Link } from "react-router-dom";
-import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
+import { AnimatePresence, motion, useMotionValue, useSpring } from "framer-motion";
 import {
   Repeat, User, Mail, Lock, Eye, EyeOff,
   ArrowRight, AlertCircle, CheckCircle2,
 } from "lucide-react";
+
+// ─── VAULT INPUT STYLES (injected once) ───────────────────────────────────────
+const VaultStyles = () => (
+  <style>{`
+    .vault-input::placeholder {
+      color: #94a3b8;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .vault-input {
+      caret-color: #4B99D4;
+    }
+  `}</style>
+);
 
 // ─── MAGNETIC BUTTON ──────────────────────────────────────────────────────────
 const MagneticButton = ({ children, className, type = "button", onClick, disabled, style = {} }) => {
@@ -45,44 +59,201 @@ const fadeUp = {
 };
 
 // ─── SMART INPUT ──────────────────────────────────────────────────────────────
+// Typography:   font-semibold (600) · normal-case · tracking-tight (-0.01em)
+// Placeholder:  slate-400 (#94a3b8) · font-medium (500) — via .vault-input CSS
+// Caret:        #4B99D4 — via .vault-input CSS
+// Focus state:  #fff bg · 2px #4B99D4 border · inset + outer glow ("carved vault")
+// Icon:         slate-400 → #4B99D4 on focus with 0.2s transition
 const SmartInput = ({ icon: Icon, label, type, value, onChange, placeholder, required, children, half }) => {
   const [focused, setFocused] = useState(false);
+
   return (
     <motion.div variants={fadeUp} style={{ flex: half ? "0 0 calc(50% - 8px)" : "1 1 100%" }}>
       <label style={{
-        display: "block", fontSize: 10, fontWeight: 900,
-        letterSpacing: "0.2em", textTransform: "uppercase",
+        display: "block",
+        fontSize: 10,
+        fontWeight: 900,
+        letterSpacing: "0.2em",
+        textTransform: "uppercase",
         color: focused ? "#4B99D4" : "#475569",
-        transition: "color 0.2s", marginBottom: 8, marginLeft: 2,
+        transition: "color 0.2s ease",
+        marginBottom: 8,
+        marginLeft: 2,
       }}>
         {label}
       </label>
+
       <div style={{ position: "relative" }}>
         {Icon && (
-          <Icon size={16} style={{
-            position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)",
-            color: focused ? "#4B99D4" : "#94a3b8", transition: "color 0.2s", pointerEvents: "none",
-          }} />
+          <Icon
+            size={16}
+            style={{
+              position: "absolute",
+              left: 14,
+              top: "50%",
+              transform: "translateY(-50%)",
+              color: focused ? "#4B99D4" : "#94a3b8",
+              transition: "color 0.2s ease",
+              pointerEvents: "none",
+            }}
+          />
         )}
+
         <input
-          type={type} value={value} onChange={onChange}
-          placeholder={placeholder} required={required}
+          className="vault-input"
+          type={type}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          required={required}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           style={{
-            width: "100%", boxSizing: "border-box",
+            // Layout
+            width: "100%",
+            boxSizing: "border-box",
             padding: `13px 16px 13px ${Icon ? "42px" : "16px"}`,
             paddingRight: children ? "46px" : "16px",
-            borderRadius: 12, fontSize: 13, fontWeight: 600,
-            color: "#0f172a", background: focused ? "#ffffff" : "#f1f5f9",
-            border: `1.5px solid ${focused ? "#4B99D4" : "#e2e8f0"}`,
-            boxShadow: focused ? "0 0 0 4px rgba(75,153,212,0.1)" : "none",
-            outline: "none", transition: "all 0.2s ease",
+            borderRadius: 12,
+            outline: "none",
+
+            // Typography — semibold · normal-case · tracking-tight
+            fontSize: 13,
+            fontWeight: 600,            // font-semibold: readable, not "ink-trapped"
+            letterSpacing: "-0.01em",   // tracking-tight: terminal / database feel
+            textTransform: "none",      // normal-case: email readability
+
+            // Color
+            color: "#0f172a",
+
+            // "Vault" focus state
+            background: focused ? "#ffffff" : "#FBFCFD",
+            border: focused
+              ? "2px solid #4B99D4"
+              : "1.5px solid #e2e8f0",
+
+            // Inset "carved" depth + outer ambient glow
+            boxShadow: focused
+              ? "inset 0 1px 4px rgba(15,23,42,0.07), inset 0 0 0 1px rgba(75,153,212,0.08), 0 0 0 3px rgba(75,153,212,0.13)"
+              : "inset 0 1px 2px rgba(15,23,42,0.03)",
+
+            // Smooth transition on ALL properties
+            transition: "all 0.2s ease",
           }}
         />
         {children}
       </div>
     </motion.div>
+  );
+};
+
+// ─── PASSWORD STRENGTH ENGINE ─────────────────────────────────────────────────
+// 4 criteria: length > 8 · uppercase · number · special character
+const getPasswordStrength = (p) => {
+  if (!p) return 0;
+  let score = 0;
+  if (p.length > 8)           score++;   // Length criterion
+  if (/[A-Z]/.test(p))        score++;   // Uppercase criterion
+  if (/[0-9]/.test(p))        score++;   // Number criterion
+  if (/[!@#$%^&*]/.test(p))   score++;   // Special character criterion
+  return score;
+};
+
+// Score → visual config
+const STRENGTH_CFG = {
+  0: { label: "",             pct: "0%",    color: "transparent", glow: false },
+  1: { label: "Weak",         pct: "25%",   color: "#f43f5e",     glow: false }, // Rose-500
+  2: { label: "Fair",         pct: "50%",   color: "#f59e0b",     glow: false }, // Amber-500
+  3: { label: "Strong",       pct: "75%",   color: "#4B99D4",     glow: false }, // Blue brand
+  4: { label: "Vault-Secure", pct: "100%",  color: "#10b981",     glow: true  }, // Emerald-500
+};
+
+// ─── PASSWORD STRENGTH BAR ────────────────────────────────────────────────────
+const PasswordStrengthBar = ({ password }) => {
+  const score = getPasswordStrength(password);
+  const cfg   = STRENGTH_CFG[score];
+
+  return (
+    <AnimatePresence>
+      {password.length > 0 && (
+        <motion.div
+          key="strength-bar"
+          initial={{ opacity: 0, y: -6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.22, ease: "easeOut" }}
+          style={{ marginTop: 8 }}
+        >
+          {/* Track */}
+          <div style={{
+            width: "100%",
+            height: 4,
+            background: "#e2e8f0",
+            borderRadius: 9999,
+            overflow: "hidden",
+          }}>
+            {/* Animated fill bar */}
+            <motion.div
+              animate={{
+                width: cfg.pct,
+                backgroundColor: cfg.color,
+              }}
+              transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+              style={{
+                height: "100%",
+                borderRadius: 9999,
+                // Vault-Secure glow — emerald outer bloom
+                boxShadow: cfg.glow
+                  ? `0 0 10px ${cfg.color}80, 0 0 4px ${cfg.color}60`
+                  : "none",
+                transition: "box-shadow 0.4s ease",
+              }}
+            />
+          </div>
+
+          {/* Strength label */}
+          <div style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginTop: 6,
+            paddingLeft: 2,
+          }}>
+            <motion.span
+              animate={{ color: cfg.color === "transparent" ? "#94a3b8" : cfg.color }}
+              transition={{ duration: 0.3 }}
+              style={{
+                fontSize: 9,
+                fontWeight: 800,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+              }}
+            >
+              {cfg.label || "—"}
+            </motion.span>
+
+            {/* Criterion dots */}
+            <div style={{ display: "flex", gap: 4 }}>
+              {[1, 2, 3, 4].map((tier) => (
+                <motion.div
+                  key={tier}
+                  animate={{
+                    backgroundColor: score >= tier ? cfg.color : "#e2e8f0",
+                    scale: score >= tier ? 1 : 0.85,
+                  }}
+                  transition={{ duration: 0.25, delay: (tier - 1) * 0.05 }}
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                  }}
+                />
+              ))}
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 };
 
@@ -184,6 +355,9 @@ const Register = () => {
         overflow: "hidden", fontFamily: "sans-serif",
       }}
     >
+      {/* Inject vault input CSS once */}
+      <VaultStyles />
+
       {/* ── Atmospheric Background ── */}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
         <div style={{
@@ -202,7 +376,7 @@ const Register = () => {
           backgroundSize: "52px 52px",
         }} />
         <div style={{
-          position: "absolute", top: "-10%", right: "30%", width: 1, height: "130%",
+          position: "absolute", top: "-10%", left: "45%", width: 1, height: "130%",
           background: "linear-gradient(180deg, transparent 0%, rgba(75,153,212,0.1) 30%, rgba(75,153,212,0.1) 70%, transparent 100%)",
           transform: "rotate(15deg)",
         }} />
@@ -212,18 +386,22 @@ const Register = () => {
 
         {/* ── Logo ── */}
         <motion.div
-          initial={{ opacity: 0, y: -18 }}
+          initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
           style={{ display: "flex", flexDirection: "column", alignItems: "center", marginBottom: 28 }}
         >
-          <div style={{
-            background: "linear-gradient(135deg, #1e293b, #0f172a)",
-            boxShadow: "0 6px 20px rgba(15,23,42,0.25)",
-            padding: 10, borderRadius: 14, marginBottom: 14,
-          }}>
+          <motion.div
+            whileHover={{ rotate: 180 }}
+            transition={{ duration: 0.4 }}
+            style={{
+              background: "linear-gradient(135deg, #1e293b, #0f172a)",
+              boxShadow: "0 6px 20px rgba(15,23,42,0.25)",
+              padding: "10px", borderRadius: "14px", marginBottom: 14,
+            }}
+          >
             <Repeat size={22} color="#ffffff" />
-          </div>
+          </motion.div>
           <h1 style={{
             fontSize: 28, fontWeight: 900, letterSpacing: "-0.04em",
             textTransform: "uppercase", fontStyle: "italic",
@@ -251,8 +429,6 @@ const Register = () => {
             boxShadow: "0 4px 6px rgba(15,23,42,0.04), 0 20px 50px rgba(75,153,212,0.09)",
           }}
         >
-         
-
           <div style={{ padding: "32px 36px 36px" }}>
 
             {/* Card Header */}
@@ -296,29 +472,92 @@ const Register = () => {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="TheCollector77" required
               />
+
               <SmartInput
                 icon={Mail} label="Email" type="email" value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com" required
+                placeholder="Enter your email address" required
               />
 
-              <SmartInput
-                icon={Lock} label="Password" type={showPassword ? "text" : "password"}
-                value={password} onChange={(e) => setPassword(e.target.value)}
-                placeholder="Min. 8 chars, 1 uppercase, 1 symbol" required
-              >
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  style={{
-                    position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
-                    background: "none", border: "none", cursor: "pointer",
-                    color: "#94a3b8", padding: 4, display: "flex", alignItems: "center",
-                  }}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </SmartInput>
+              {/* Password field + strength bar (inline, no wrapper gap) */}
+              <motion.div variants={fadeUp} style={{ display: "flex", flexDirection: "column" }}>
+                {/* Re-use SmartInput without its own motion.div variants wrapper */}
+                <div>
+                  <label style={{
+                    display: "block", fontSize: 10, fontWeight: 900,
+                    letterSpacing: "0.2em", textTransform: "uppercase",
+                    color: "#475569", transition: "color 0.2s ease",
+                    marginBottom: 8, marginLeft: 2,
+                  }}>
+                    Password
+                  </label>
+                  <div style={{ position: "relative" }}>
+                    <Lock size={16} style={{
+                      position: "absolute", left: 14, top: "50%",
+                      transform: "translateY(-50%)",
+                      color: "#94a3b8",
+                      pointerEvents: "none",
+                      transition: "color 0.2s ease",
+                    }} id="lock-icon" />
+                    <input
+                      className="vault-input"
+                      id="password-input"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      // Placeholder: no "min 8 chars" hint — the strength bar IS the hint
+                      placeholder="Create a password"
+                      required
+                      onFocus={(e) => {
+                        e.currentTarget.style.background   = "#ffffff";
+                        e.currentTarget.style.border       = "2px solid #4B99D4";
+                        e.currentTarget.style.boxShadow    = "inset 0 1px 4px rgba(15,23,42,0.07), inset 0 0 0 1px rgba(75,153,212,0.08), 0 0 0 3px rgba(75,153,212,0.13)";
+                        document.getElementById("lock-icon").style.color = "#4B99D4";
+                        document.querySelector("label[for='password-label']")?.style;
+                      }}
+                      onBlur={(e) => {
+                        e.currentTarget.style.background   = "#FBFCFD";
+                        e.currentTarget.style.border       = "1.5px solid #e2e8f0";
+                        e.currentTarget.style.boxShadow    = "inset 0 1px 2px rgba(15,23,42,0.03)";
+                        document.getElementById("lock-icon").style.color = "#94a3b8";
+                      }}
+                      style={{
+                        width: "100%", boxSizing: "border-box",
+                        padding: "13px 46px 13px 42px",
+                        borderRadius: 12, outline: "none",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        letterSpacing: "-0.01em",
+                        textTransform: "none",
+                        color: "#0f172a",
+                        background: "#FBFCFD",
+                        border: "1.5px solid #e2e8f0",
+                        boxShadow: "inset 0 1px 2px rgba(15,23,42,0.03)",
+                        transition: "all 0.2s ease",
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: "absolute", right: 14, top: "50%",
+                        transform: "translateY(-50%)",
+                        background: "none", border: "none", cursor: "pointer",
+                        color: "#94a3b8", padding: 4,
+                        display: "flex", alignItems: "center",
+                        transition: "color 0.2s ease",
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.color = "#4B99D4"}
+                      onMouseLeave={e => e.currentTarget.style.color = "#94a3b8"}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* ── Strength Bar ── animated, updates in real-time */}
+                <PasswordStrengthBar password={password} />
+              </motion.div>
 
               {/* Message */}
               <AnimatePresence mode="wait">
@@ -339,7 +578,7 @@ const Register = () => {
                   >
                     {isSuccess
                       ? <CheckCircle2 size={14} style={{ flexShrink: 0, marginTop: 1 }} />
-                      : <AlertCircle size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                      : <AlertCircle  size={14} style={{ flexShrink: 0, marginTop: 1 }} />
                     }
                     {message}
                   </motion.div>

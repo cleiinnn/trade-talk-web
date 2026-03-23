@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
   Users, Search, PlusCircle, Filter, ArrowLeft,
   UserPlus, UserMinus, Loader2, ChevronRight,
@@ -206,6 +206,7 @@ const GroupCard = ({ group, index, onJoin, onLeave }) => {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 const GroupList = () => {
+  void motion;
   const navigate = useNavigate();
   const [groups, setGroups] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -214,13 +215,31 @@ const GroupList = () => {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [toast, setToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
 
-  const user = JSON.parse(sessionStorage.getItem('user'));
+  const [user] = useState(() => JSON.parse(sessionStorage.getItem('user')));
 
   useEffect(() => {
-    if (!user || user.role !== 'user') { navigate('/login'); return; }
+    if (!user || user.role !== 'user') {
+      navigate('/login');
+      return;
+    }
+
     fetchCategories();
+  }, [navigate, user]);
+
+  useEffect(() => {
+    if (!user || user.role !== 'user') {
+      return;
+    }
+
     fetchGroups();
+  }, [selectedCategory, user]);
+
+  useEffect(() => () => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
   }, []);
 
   const fetchCategories = async () => {
@@ -243,11 +262,16 @@ const GroupList = () => {
     finally { setLoading(false); }
   };
 
-  useEffect(() => { fetchGroups(); }, [selectedCategory]);
-
   const showToast = (msg, success = true) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+
     setToast({ msg, success });
-    setTimeout(() => setToast(null), 3000);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+      toastTimeoutRef.current = null;
+    }, 3000);
   };
 
   const handleJoin = async (groupId) => {
@@ -314,7 +338,7 @@ const GroupList = () => {
               onClick={() => navigate('/home')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 8,
-                padding: '9px 16px', borderRadius: 12, border: 'none',
+                padding: '9px 16px', borderRadius: 12,
                 background: '#ffffff', cursor: 'pointer',
                 fontSize: 12, fontWeight: 800, color: '#64748b',
                 boxShadow: '0 1px 4px rgba(15,23,42,0.06)',

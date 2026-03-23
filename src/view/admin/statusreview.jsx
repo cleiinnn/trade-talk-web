@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useAdminAuth } from "../../hooks/useAdminAuth";
 import { 
   ArrowLeft, 
@@ -21,7 +21,6 @@ const StatusReview = () => {
   const [rejectedListings, setRejectedListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const navigate = useNavigate();
 
   // // 🔐 ADMIN ROLE PROTECTION using sessionStorage
   // useEffect(() => {

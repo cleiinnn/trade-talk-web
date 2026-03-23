@@ -28,7 +28,7 @@ import {
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 const StatCard = ({ icon: Icon, label, value, sub, color }) => (
-  <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center gap-5">
+  (void Icon, <div className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex items-center gap-5">
     <div className={`p-3 rounded-xl ${color}`}>
       <Icon size={22} className="text-white" />
     </div>
@@ -37,7 +37,7 @@ const StatCard = ({ icon: Icon, label, value, sub, color }) => (
       <p className="text-3xl font-black text-slate-900 leading-none mt-0.5">{value}</p>
       {sub && <p className="text-[10px] font-bold text-slate-400 mt-1">{sub}</p>}
     </div>
-  </div>
+  </div>)
 );
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────

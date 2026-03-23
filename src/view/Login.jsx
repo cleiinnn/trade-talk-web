@@ -1,11 +1,25 @@
 import React, { useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { motion, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
+import { AnimatePresence, motion, useMotionValue, useSpring } from "framer-motion";
 import {
   Repeat, Mail, Lock, AlertCircle,
   Eye, EyeOff, ShieldCheck, ArrowRight,
 } from "lucide-react";
 import { loginUser } from "../viewmodel/api";
+
+// ─── VAULT INPUT STYLES (injected once at module level) ───────────────────────
+const VaultStyles = () => (
+  <style>{`
+    .vault-input::placeholder {
+      color: #94a3b8;
+      font-weight: 500;
+      letter-spacing: 0;
+    }
+    .vault-input {
+      caret-color: #4B99D4;
+    }
+  `}</style>
+);
 
 // ─── MAGNETIC BUTTON ──────────────────────────────────────────────────────────
 const MagneticButton = ({ children, className, type = "button", onClick, disabled, style = {} }) => {
@@ -45,8 +59,14 @@ const fadeUp = {
 };
 
 // ─── INPUT FIELD ──────────────────────────────────────────────────────────────
+// Typography:   font-semibold (600) · normal-case · tracking-tight (-0.01em)
+// Placeholder:  slate-400 (#94a3b8) · font-medium (500) — via .vault-input CSS
+// Caret:        #4B99D4 — via .vault-input CSS
+// Focus state:  #fff bg · 2px #4B99D4 border · inset + outer glow ("carved vault")
+// Icon:         slate-400 → #4B99D4 on focus with 0.2s transition
 const InputField = ({ icon: Icon, label, type, value, onChange, placeholder, required, children }) => {
   const [focused, setFocused] = useState(false);
+
   return (
     <motion.div variants={fadeUp} className="space-y-2">
       <label style={{
@@ -56,38 +76,66 @@ const InputField = ({ icon: Icon, label, type, value, onChange, placeholder, req
         letterSpacing: "0.2em",
         textTransform: "uppercase",
         color: focused ? "#4B99D4" : "#475569",
-        transition: "color 0.2s",
+        transition: "color 0.2s ease",
         marginLeft: "2px",
       }}>
         {label}
       </label>
+
       <div className="relative">
+        {/* Icon — glows to brand blue on focus */}
         <Icon
           size={16}
           style={{
-            position: "absolute", left: 16, top: "50%", transform: "translateY(-50%)",
+            position: "absolute",
+            left: 16,
+            top: "50%",
+            transform: "translateY(-50%)",
             color: focused ? "#4B99D4" : "#94a3b8",
-            transition: "color 0.2s",
+            transition: "color 0.2s ease",
             pointerEvents: "none",
           }}
         />
+
         <input
-          type={type} value={value} onChange={onChange}
-          placeholder={placeholder} required={required}
+          className="vault-input"
+          type={type}
+          value={value}
+          onChange={onChange}
+          placeholder={placeholder}
+          required={required}
           onFocus={() => setFocused(true)}
           onBlur={() => setFocused(false)}
           style={{
+            // Layout
             width: "100%",
             padding: "14px 16px 14px 44px",
             paddingRight: children ? "48px" : "16px",
             borderRadius: "14px",
-            fontSize: "14px",
-            fontWeight: 600,
-            color: "#0f172a",
-            background: focused ? "#ffffff" : "#f1f5f9",
-            border: `1.5px solid ${focused ? "#4B99D4" : "#e2e8f0"}`,
-            boxShadow: focused ? "0 0 0 4px rgba(75,153,212,0.12)" : "none",
+            boxSizing: "border-box",
             outline: "none",
+
+            // Typography — semibold · normal-case · tracking-tight
+            fontSize: "14px",
+            fontWeight: 600,            // font-semibold: readable, not "ink-trapped"
+            letterSpacing: "-0.01em",   // tracking-tight: terminal / database feel
+            textTransform: "none",      // normal-case: email readability
+
+            // Color
+            color: "#0f172a",
+
+            // "Vault" focus state
+            background: focused ? "#ffffff" : "#FBFCFD",
+            border: focused
+              ? "2px solid #4B99D4"
+              : "1.5px solid #e2e8f0",
+
+            // Inset "carved" depth + outer ambient glow
+            boxShadow: focused
+              ? "inset 0 1px 4px rgba(15,23,42,0.07), inset 0 0 0 1px rgba(75,153,212,0.08), 0 0 0 3px rgba(75,153,212,0.13)"
+              : "inset 0 1px 2px rgba(15,23,42,0.03)",
+
+            // Smooth transition on ALL properties
             transition: "all 0.2s ease",
           }}
         />
@@ -155,6 +203,9 @@ const Login = () => {
         fontFamily: "sans-serif",
       }}
     >
+      {/* Inject vault input CSS once */}
+      <VaultStyles />
+
       {/* ── Atmospheric Background ── */}
       <div style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
         <div style={{
@@ -229,7 +280,6 @@ const Login = () => {
             boxShadow: "0 4px 6px rgba(15,23,42,0.04), 0 20px 50px rgba(75,153,212,0.09)",
           }}
         >
-          
           <div style={{ padding: "36px 40px 40px" }}>
 
             {/* Card Header */}
@@ -257,7 +307,7 @@ const Login = () => {
               <InputField
                 icon={Mail} label="Email Address" type="email"
                 value={email} onChange={(e) => setEmail(e.target.value)}
-                placeholder="your@email.com" required
+                placeholder="Enter your email address" required
               />
 
               <InputField
@@ -272,7 +322,10 @@ const Login = () => {
                     position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)",
                     background: "none", border: "none", cursor: "pointer",
                     color: "#94a3b8", padding: 4, display: "flex", alignItems: "center",
+                    transition: "color 0.2s ease",
                   }}
+                  onMouseEnter={e => e.currentTarget.style.color = "#4B99D4"}
+                  onMouseLeave={e => e.currentTarget.style.color = "#94a3b8"}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -328,7 +381,7 @@ const Login = () => {
                     cursor: isLoading ? "not-allowed" : "pointer",
                     background: isLoading
                       ? "rgba(75,153,212,0.5)"
-                      : "linear-gradient(135deg, #1e293b 100%)",
+                      : "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
                     boxShadow: isLoading ? "none" : "0 8px 28px rgba(75,153,212,0.4)",
                     display: "flex", alignItems: "center", justifyContent: "center", gap: 10,
                   }}

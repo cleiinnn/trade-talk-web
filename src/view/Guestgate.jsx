@@ -9,7 +9,7 @@
  *   <Route path="/safety"      element={<GuestGate page="Safety" />} />
  */
 
-import React, { useEffect, useState, useRef } from "react";
+import React, { useRef, useEffect } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { motion, useMotionValue, useSpring } from "framer-motion";
 import {
@@ -81,19 +81,22 @@ const MagneticBtn = ({ children, onClick, style = {} }) => {
 
 // ─── MAIN COMPONENT ───────────────────────────────────────────────────────────
 const GuestGate = ({ page = "Marketplace" }) => {
+  void motion;
   const navigate = useNavigate();
-  const [checking, setChecking] = useState(true);
   const meta = PAGE_META[page] || PAGE_META.Marketplace;
-
+  let hasSession = false;
+  try {
+    hasSession = !!sessionStorage.getItem("user");
+  } catch {
+    hasSession = false;
+  }
   useEffect(() => {
-    try {
-      const raw = sessionStorage.getItem("user");
-      if (raw) { navigate("/home", { replace: true }); return; }
-    } catch { /* ignore */ }
-    setChecking(false);
-  }, [navigate]);
+    if (hasSession) {
+      navigate("/home", { replace: true });
+    }
+  }, [hasSession, navigate]);
 
-  if (checking) return null;
+  if (hasSession) return null;
 
   return (
     <motion.div

@@ -49,7 +49,7 @@ const ReportUserModal = ({ isOpen, onClose, reportedUserId, reportedUserName, tr
       } else {
         setError(res.data.message || "Failed to submit report.");
       }
-    } catch (err) {
+    } catch {
       setError("Server error. Please try again.");
     } finally {
       setLoading(false);

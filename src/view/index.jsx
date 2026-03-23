@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { motion, useInView, AnimatePresence, useMotionValue, useSpring, useScroll, useTransform } from "framer-motion";
+import { motion, useInView, AnimatePresence, useMotionValue, useSpring } from "framer-motion";
 import {
   Repeat, ArrowRight, ShieldCheck, Zap, MessageCircle,
   Star, Globe, Users, TrendingUp, Package, Award,
@@ -73,13 +73,15 @@ const useStats = () => {
 };
 
 const useAuth = () => {
-  const [user, setUser] = useState(null);
-  useEffect(() => {
+  const [user, setUser] = useState(() => {
     try {
       const raw = sessionStorage.getItem("user");
-      if (raw) setUser(JSON.parse(raw));
-    } catch { sessionStorage.removeItem("user"); }
-  }, []);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      sessionStorage.removeItem("user");
+      return null;
+    }
+  });
   const logout = useCallback(() => { sessionStorage.removeItem("user"); setUser(null); }, []);
   return { user, logout };
 };
@@ -108,14 +110,9 @@ const scaleIn = {
   visible: { opacity: 1, scale: 1, transition: { duration: 0.5, ease: [0.22, 1, 0.36, 1] } },
 };
 
-const slideRight = {
-  hidden: { opacity: 0, x: -24 },
-  visible: { opacity: 1, x: 0, transition: { duration: 0.55, ease: [0.22, 1, 0.36, 1] } },
-};
-
 // ─── MAGNETIC BUTTON ───────────────────────────────────────────────────────────
 // style prop is spread AFTER x/y so backgrounds & borders always apply
-const MagneticButton = ({ children, className, onClick, style = {}, as: Tag = "button", to, type }) => {
+const MagneticButton = ({ children, className, onClick, style = {}, to, type }) => {
   const ref = useRef(null);
   const x = useMotionValue(0);
   const y = useMotionValue(0);
@@ -495,6 +492,7 @@ const AboutSection = () => {
 
 // ─── MAIN COMPONENT ────────────────────────────────────────────────────────────
 const Home = () => {
+  void motion;
   const navigate = useNavigate();
   const { stats, loading: statsLoading } = useStats();
   const { user, logout } = useAuth();

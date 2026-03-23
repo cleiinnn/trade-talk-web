@@ -271,7 +271,7 @@ const CategoryMegaMenu = ({ dynamicCategories, listings, selectedCategory, setSe
             {/* ── Scrollable grid body ────────────────────────────────────── */}
             <div className={ui.categoryMegaMenu.gridBody}>
               <div className={ui.categoryMegaMenu.gridContainer}>
-                {allTiles.map((tile, i) => {
+                {allTiles.map((tile) => {
                   const Icon    = tile.icon;
                   const visual  = categoryVisuals[tile.name] || defaultVisual;
                   const count   = tile.name === 'All' ? listings.length : (countByCategory[tile.name] || 0);
@@ -374,6 +374,7 @@ const CategoryMegaMenu = ({ dynamicCategories, listings, selectedCategory, setSe
 
 /* ─── MAIN COMPONENT ─────────────────────────────────────────────────────────── */
 const Home = () => {
+  void motion;
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [listings, setListings] = useState([]);

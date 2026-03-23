@@ -102,7 +102,6 @@ const RequestCard = ({
   onReviewUser 
 }) => {
   const [expanded, setExpanded]   = useState(false);
-  const [confirming, setConfirming] = useState(false); // still used for spinner? Actually we now open modal, so maybe remove. But keep for now.
   const navigate = useNavigate();
 
   const isTrade    = req.request_type === "trade";

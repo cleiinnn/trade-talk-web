@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import { deleteListing } from "../../viewmodel/api";
@@ -406,7 +406,6 @@ const Listings = () => {
                 </tr>
               </thead>
               <tbody>
-                
                 {Array.isArray(userListings) && userListings.map(listing => (
                   <tr key={listing.listing_id} className="bg-slate-50 hover:bg-slate-100 transition-colors">
                     {/* 1. ITEM COLUMN */}
